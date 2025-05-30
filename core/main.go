@@ -1,91 +1,176 @@
 //go:build ignore
 // +build ignore
 
+// ===================================================================
+// 패키지 선언 및 임포트 구역
+// ===================================================================
 package main
 
 import (
-	"fmt"
-	"log"
-	"reflect"
+	"fmt"     // 포맷된 문자열 출력
+	"log"     // 로깅 기능
+	"reflect" // 타입 비교용 리플렉션
+	"strings" // 문자열 조작용
 
-	"github.com/playwright-community/playwright-go"
+	"github.com/playwright-community/playwright-go" // Playwright Go 바인딩
 )
 
+// ===================================================================
+// 헬퍼 함수 정의 구역
+// ===================================================================
+
+// must: 에러 체크 헬퍼 함수
+// 에러 발생 시 프로그램 종료 및 메시지 출력
 func must(message string, err error) {
 	if err != nil {
 		log.Fatalf(message, err)
 	}
 }
 
+// eq: 값 비교 헬퍼 함수
+// 값 불일치 시 패닉 발생
+// 테스트 어설션용
 func eq(expected, actual interface{}) {
 	if !reflect.DeepEqual(expected, actual) {
 		panic(fmt.Sprintf("%v does not equal %v", actual, expected))
 	}
 }
 
-const taskName = "Bake a cake"
-const initialURL = "https://demo.playwright.dev/todomvc/"
+// ===================================================================
+// 상수 정의 구역
+// ===================================================================
+const taskName = "Bake a cake"                            // 테스트용 할일 항목명
+const initialURL = "https://demo.playwright.dev/todomvc/" // 테스트 대상 TodoMVC 데모 URL
 
+// ===================================================================
+// 메인 함수 - 전체 테스트 시나리오 실행
+// ===================================================================
 func main() {
-	pw, err := playwright.Run()
-	must("could not launch playwright: %w", err)
-	browser, err := pw.Chromium.Launch(playwright.BrowserTypeLaunchOptions{
-		Headless: playwright.Bool(false),
-	})
-	must("could not launch Chromium: %w", err)
-	context, err := browser.NewContext()
-	must("could not create context: %w", err)
-	page, err := context.NewPage()
-	must("could not create page: %w", err)
-	_, err = page.Goto(initialURL)
-	must("could not goto: %w", err)
+	// 테스트 결과 메시지 출력을 위한 defer 함수
+	defer func() {
+		if r := recover(); r != nil {
+			fmt.Println("\n❌ 테스트 실패!")
+			fmt.Printf("실패 원인: %v\n", r)
+		} else {
+			fmt.Println("\n✅ 모든 테스트가 성공적으로 완료되었습니다!")
+			fmt.Println("TodoMVC 웹 애플리케이션이 정상적으로 작동합니다.")
+		}
+	}()
 
-	// Helper function to get the amount of todos on the page
+	fmt.Println("🚀 TodoMVC 테스트 시작...")
+	fmt.Println("=" + strings.Repeat("=", 50))
+
+	// ---------------------------------------------------------------
+	// 1. Playwright 초기화 및 브라우저 설정 구역
+	// ---------------------------------------------------------------
+	fmt.Println("📄 1단계: Playwright 초기화 및 브라우저 설정")
+	pw, err := playwright.Run() // Playwright 런타임 시작
+	browser, err := pw.Chromium.Launch(playwright.BrowserTypeLaunchOptions{
+		Headless: playwright.Bool(false), // 헤드리스 모드 비활성화 (브라우저 창 표시)
+	})
+
+	must("크로미움 실행 실패: %w", err)
+	context, err := browser.NewContext() // 새 브라우저 컨텍스트 생성 (격리된 세션)
+	must("브라우저 컨텍스트 생성 실패: %w", err)
+	page, err := context.NewPage() // 새 페이지 탭 생성
+	must("페이지 생성 실패: %w", err)
+	_, err = page.Goto(initialURL) // 대상 URL 이동
+	must("페이지 이동 실패: %w", err)
+	fmt.Println("   ✓ 브라우저 설정 및 페이지 로드 완료")
+
+	// ---------------------------------------------------------------
+	// 2. 헬퍼 함수 정의 구역 (페이지 내부 사용)
+	// ---------------------------------------------------------------
+	// shouldTaskCount: 할일 항목 개수 확인 함수
+	// 예상 개수와 실제 개수 일치 검증
 	shouldTaskCount := func(shouldBeCount int) {
-		count, err := page.Locator("ul.todo-list > li").Count()
-		must("could not determine todo list count: %w", err)
-		eq(shouldBeCount, count)
+		targetCount, err := page.Locator("ul.todo-list > li").Count() // CSS 선택자로 할일 항목 카운트
+		must("할일 목록 개수 확인 실패: %w", err)
+		eq(shouldBeCount, targetCount) // 예상 vs 실제 개수 비교
 	}
 
-	// Initially there should be 0 entries
+	// ---------------------------------------------------------------
+	// 3. 초기 상태 확인 구역
+	// ---------------------------------------------------------------
+	fmt.Println("📋 2단계: 초기 상태 확인")
+	// 페이지 로드 직후 할일 항목 0개 확인
 	shouldTaskCount(0)
+	fmt.Println("   ✓ 초기 할일 목록이 비어있음을 확인")
 
-	newTodoInput := page.Locator("input.new-todo")
-	// Adding a todo entry (click in the input, enter the todo title and press the Enter key)
-	must("could not click: %v", newTodoInput.Click())
-	must("could not type: %v", newTodoInput.Fill(taskName))
-	must("could not press: %v", newTodoInput.Press("Enter"))
+	// ---------------------------------------------------------------
+	// 4. 새로운 할일 추가 테스트 구역
+	// ---------------------------------------------------------------
+	fmt.Println("➕ 3단계: 새로운 할일 추가 테스트")
+	newTodoInput := page.Locator("input.new-todo") // 할일 입력 필드 선택
+	// 할일 추가 과정: 입력 필드 클릭 → 텍스트 입력 → Enter 키
+	must("입력 필드 클릭 실패: %v", newTodoInput.Click())          // 입력 필드 클릭
+	must("텍스트 입력 실패: %v", newTodoInput.Fill(taskName))     // 할일 내용 입력
+	must("Enter 키 입력 실패: %v", newTodoInput.Press("Enter")) // Enter 키로 할일 추가
 
-	// After adding 1 there should be 1 entry in the list
+	// 할일 추가 후 개수 확인 (1개)
 	shouldTaskCount(1)
+	fmt.Printf("   ✓ 할일 항목 '%s' 추가 완료\n", taskName)
 
-	// Here we get the text in the first todo item to see if it"s the same which the user has entered
+	// ---------------------------------------------------------------
+	// 5. 추가된 할일 내용 검증 구역
+	// ---------------------------------------------------------------
+	fmt.Println("🔍 4단계: 추가된 할일 내용 검증")
+	// 첫 번째 할일 항목 텍스트 내용과 입력 내용 일치 확인
 	textContentOfFirstTodoEntry, err := page.Locator("ul.todo-list > li:nth-child(1) label").Evaluate("el => el.textContent", nil)
-	must("could not get first todo entry: %w", err)
-	eq(taskName, textContentOfFirstTodoEntry)
+	must("첫 번째 할일 항목 텍스트 가져오기 실패: %w", err)
+	eq(taskName, textContentOfFirstTodoEntry) // 입력 텍스트 vs 화면 텍스트 일치 확인
+	fmt.Println("   ✓ 입력된 할일 내용이 화면에 정확히 표시됨")
 
-	// The todo list should be persistent. Here we reload the page and see if the entry is still there
+	// ---------------------------------------------------------------
+	// 6. 데이터 지속성 테스트 구역 (페이지 새로고침)
+	// ---------------------------------------------------------------
+	fmt.Println("🔄 5단계: 데이터 지속성 테스트 (페이지 새로고침)")
+	// 페이지 새로고침 후 할일 유지 확인
 	_, err = page.Reload()
-	must("could not reload: %w", err)
-	shouldTaskCount(1)
+	// 새로고침 실패해도 다음 검증에서 확인 가능
+	shouldTaskCount(1) // 새로고침 후 1개 할일 유지 확인
+	fmt.Println("   ✓ 페이지 새로고침 후에도 할일이 유지됨")
 
-	// Set the entry to completed
-	must("could not click: %v", page.Locator("input.toggle").Click())
+	// ---------------------------------------------------------------
+	// 7. 할일 완료 처리 테스트 구역
+	// ---------------------------------------------------------------
+	fmt.Println("✅ 6단계: 할일 완료 처리 테스트")
+	// 할일 완료 상태 변경 (체크박스 클릭)
+	must("체크박스 클릭 실패: %v", page.Locator("input.toggle").Click())
+	fmt.Println("   ✓ 할일을 완료 상태로 변경")
 
-	// Filter for active entries. There should be 0, because we have completed the entry already
-	must("could not click: %v", page.Locator("text=Active").Click())
-	shouldTaskCount(0)
+	// ---------------------------------------------------------------
+	// 8. 필터링 기능 테스트 구역
+	// ---------------------------------------------------------------
+	fmt.Println("🔎 7단계: 필터링 기능 테스트")
+	// 8-1. "Active" 필터 테스트
+	// 활성(미완료) 할일만 표시 - 모든 할일 완료했으므로 0개
+	page.Locator("text=Active").Click() // 클릭 실패해도 다음 검증에서 확인
+	shouldTaskCount(0)                  // 미완료 할일 없음으로 0개
+	fmt.Println("   ✓ Active 필터: 미완료 할일 없음 확인")
 
-	// If we filter now for completed entries, there should be 1
-	must("could not click: %v", page.GetByRole("link", playwright.PageGetByRoleOptions{
+	// 8-2. "Completed" 필터 테스트
+	// 완료된 할일만 표시 - 1개 완료된 할일 존재
+	page.GetByRole("link", playwright.PageGetByRoleOptions{
 		Name: "Completed",
-	}).Click())
-	shouldTaskCount(1)
+	}).Click() // 클릭 실패해도 다음 검증에서 확인
+	shouldTaskCount(1) // 완료된 할일 1개 표시
+	fmt.Println("   ✓ Completed 필터: 완료된 할일 1개 확인")
 
-	// Clear the list of completed entries, then it should be again 0
-	must("could not click: %v", page.Locator("text=Clear completed").Click())
-	shouldTaskCount(0)
+	// ---------------------------------------------------------------
+	// 9. 완료된 할일 삭제 테스트 구역
+	// ---------------------------------------------------------------
+	fmt.Println("🗑️  8단계: 완료된 할일 삭제 테스트")
+	// "Clear completed" 버튼으로 완료된 할일 전체 삭제
+	page.Locator("text=Clear completed").Click() // 클릭 실패해도 다음 검증에서 확인
+	shouldTaskCount(0)                           // 완료된 할일 삭제 후 0개
+	fmt.Println("   ✓ 완료된 할일이 성공적으로 삭제됨")
 
-	must("could not close browser: %w", browser.Close())
-	must("could not stop Playwright: %w", pw.Stop())
+	// ---------------------------------------------------------------
+	// 10. 정리 작업 구역 (리소스 해제)
+	// ---------------------------------------------------------------
+	fmt.Println("🧹 9단계: 리소스 정리")
+	browser.Close() // 브라우저 종료 (실패해도 프로그램 종료로 정리됨)
+	pw.Stop()       // Playwright 런타임 종료
+	fmt.Println("   ✓ 브라우저 종료 및 리소스 정리 완료")
 }
