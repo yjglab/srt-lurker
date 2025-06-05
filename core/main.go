@@ -7,12 +7,21 @@
 package main
 
 import (
-	"fmt"     // 포맷된 문자열 출력
-	"log"     // 로깅 기능
+	"fmt" // 포맷된 문자열 출력
+	"log" // 로깅 기능
+	"os"  // 환경변수 읽기용
+
+	// 문자열을 숫자로 변환용
+	// 이메일 발송용
+	"net/smtp" // SMTP 패키지
+	// 환경변수 읽기용
 	"reflect" // 타입 비교용 리플렉션
+	// 문자열 변환용
 	"strings" // 문자열 조작용
 	"time"    // 시간 조작용
 
+	// .env 파일 로드용
+	"github.com/joho/godotenv"                      // .env 파일 로드용
 	"github.com/playwright-community/playwright-go" // Playwright Go 바인딩
 )
 
@@ -122,25 +131,47 @@ const (
 )
 
 var passengerInfo = struct {
-	deptStation     string
-	arrivalStation  string
-	deptTime        string
-	arrivalTime     string
-	date            string
-	name            string
-	phone           string
-	password        string
-	passwordConfirm string
+	deptStation         string
+	arrivalStation      string
+	deptTime            string
+	arrivalTime         string
+	date                string
+	name                string
+	phone               string
+	password            string
+	passwordConfirm     string
+	notificationEmail   string
+	notificationEnabled bool
 }{
 	deptStation:     "동탄",
 	arrivalStation:  "전주",
-	deptTime:        "19:26",
-	arrivalTime:     "20:51",
+	deptTime:        "10:37",
+	arrivalTime:     "12:07",
 	date:            "20250622",
 	name:            "홍길동",
 	phone:           "01012345678",
 	password:        "123456",
 	passwordConfirm: "123456",
+	// email 발송 희망하는 경우
+	notificationEmail:   "jkethics@naver.com",
+	notificationEnabled: true,
+}
+
+// 이메일 설정
+var emailConfig = struct {
+	smtpHost      string
+	smtpPort      string
+	senderEmail   string
+	senderPass    string
+	receiverEmail string
+	enabled       bool
+}{
+	smtpHost:      "",
+	smtpPort:      "",
+	senderEmail:   "",
+	senderPass:    "",
+	receiverEmail: "",
+	enabled:       false,
 }
 
 // 필드 선택자 상수
@@ -434,7 +465,6 @@ func attemptReservation(page playwright.Page, attempt int) error {
 	// 	return err
 	// }
 
-	fmt.Println("   ✨ 예약 페이지로 이동 성공!")
 	return nil
 }
 
@@ -442,6 +472,9 @@ func attemptReservation(page playwright.Page, attempt int) error {
 // 메인 함수 - SRT 예약 자동화 (재시도 로직 포함)
 // ===================================================================
 func main() {
+	// 환경변수 설정 로드
+	loadConfig()
+
 	defer func() {
 		if r := recover(); r != nil {
 			fmt.Println("\n⚠️ 치명적 오류 발생!")
@@ -481,10 +514,16 @@ func main() {
 		err := attemptReservation(page, attempt)
 		if err == nil {
 			fmt.Printf("\n✨ 성공! %d번째 시도에서 예약에 성공했습니다!\n", attempt)
-			fmt.Println("ℹ️ 10분 안에 결제를 진행하세요. 이후 브라우저가 자동으로 종료됩니다.")
+			fmt.Println("ℹ️ 지금 결제를 진행하세요. 10분 후 브라우저가 자동으로 종료됩니다.")
+
+			// 이메일 발송
+			if err := sendNotificationEmail(true, ""); err != nil {
+				fmt.Printf("이메일 발송 실패: %v\n", err)
+			}
 
 			// 성공 시 10분 대기 후 종료
 			wait(600)
+
 			break
 		}
 
@@ -504,10 +543,108 @@ func main() {
 		fmt.Printf("마지막 오류: %v\n", lastError)
 		fmt.Println("↻ 프로그램을 다시 실행해보거나 수동으로 예약을 시도하세요.")
 		wait(5)
+
+		// 이메일 발송
+		if err := sendNotificationEmail(false, lastError.Error()); err != nil {
+			fmt.Printf("이메일 발송 실패: %v\n", err)
+		}
 	}
 
 	// 정리 작업
 	browser.Close()
 	pw.Stop()
 	fmt.Println("   ✓ 리소스 정리 완료")
+}
+
+// sendNotificationEmail: 예약 완료 알림 이메일 발송
+func sendNotificationEmail(success bool, message string) error {
+	if !passengerInfo.notificationEnabled {
+		fmt.Println("   ℹ️ 이메일 발송이 비활성화되어 있습니다")
+		return nil
+	}
+
+	// 이메일 제목과 내용 설정
+	var subject, body string
+	if success {
+		subject = "🚄 SRT 미등록고객 예약 성공 알림"
+		body = fmt.Sprintf(`SRT 예약이 성공적으로 완료되었습니다!
+
+📍 예약 정보:
+- 출발역: %s (%s)
+- 도착역: %s (%s)
+- 날짜: %s
+- 예약자: %s
+
+💡 10분 안에 결제를 완료해주세요!
+
+%s`,
+			passengerInfo.deptStation, passengerInfo.deptTime,
+			passengerInfo.arrivalStation, passengerInfo.arrivalTime,
+			passengerInfo.date,
+			passengerInfo.name,
+			message)
+	} else {
+		subject = "⚠️ SRT 미등록고객 예약 실패 알림"
+		body = fmt.Sprintf(`SRT 예약에 실패했습니다.
+
+📍 시도한 예약 정보:
+- 출발역: %s (%s)
+- 도착역: %s (%s)
+- 날짜: %s
+
+❌ 오류: %s
+
+다시 시도하거나 수동으로 예약해주세요.`,
+			passengerInfo.deptStation, passengerInfo.deptTime,
+			passengerInfo.arrivalStation, passengerInfo.arrivalTime,
+			passengerInfo.date,
+			message)
+	}
+
+	// 이메일 메시지 구성
+	msg := []byte("To: " + passengerInfo.notificationEmail + "\r\n" +
+		"Subject: " + subject + "\r\n" +
+		"MIME-Version: 1.0\r\n" +
+		"Content-Type: text/plain; charset=UTF-8\r\n" +
+		"\r\n" +
+		body + "\r\n")
+
+	// SMTP 인증
+	auth := smtp.PlainAuth("", emailConfig.senderEmail, emailConfig.senderPass, emailConfig.smtpHost)
+
+	// 이메일 발송
+	err := smtp.SendMail(emailConfig.smtpHost+":"+emailConfig.smtpPort, auth,
+		emailConfig.senderEmail, []string{passengerInfo.notificationEmail}, msg)
+
+	if err != nil {
+		return fmt.Errorf("이메일 발송 실패: %w", err)
+	}
+
+	fmt.Println("   ✅ 예약 성공 및 결제 알림 이메일이 발송되었습니다")
+	return nil
+}
+
+// loadConfig: .env 파일에서 설정 로드
+func loadConfig() {
+	// .env 파일 로드
+	if err := godotenv.Load(); err != nil {
+		fmt.Println("⚠️ .env 파일을 찾을 수 없습니다. 기본값을 사용합니다.")
+		return
+	}
+
+	// 환경변수에서 설정 읽기
+	if host := os.Getenv("SMTP_HOST"); host != "" {
+		emailConfig.smtpHost = host
+	}
+	if port := os.Getenv("SMTP_PORT"); port != "" {
+		emailConfig.smtpPort = port
+	}
+	if email := os.Getenv("SENDER_EMAIL"); email != "" {
+		emailConfig.senderEmail = email
+	}
+	if pass := os.Getenv("SENDER_PASSWORD"); pass != "" {
+		emailConfig.senderPass = pass
+	}
+
+	fmt.Println("✅ 환경변수에서 이메일 설정을 로드했습니다")
 }
