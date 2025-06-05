@@ -202,6 +202,19 @@ func step3SearchTrains(page playwright.Page) error {
 // step4CheckAvailability: 4단계 - 예약 가능한 열차 확인
 func step4CheckAvailability(page playwright.Page) error {
 	fmt.Println("▶ 4단계: 예약 가능 열차 확인")
+	// 만약 div#NetFunnel_Skin_Top 가 나온다면 진입 대기중이므로 없어질 때까지 기다림.
+	netfunnelLocator := page.Locator("div#NetFunnel_Skin_Top")
+	if count, _ := netfunnelLocator.Count(); count > 0 {
+		fmt.Println("   ⏳ 진입 대기 중...")
+		netfunnelLocator.WaitFor(playwright.LocatorWaitForOptions{
+			State:   playwright.WaitForSelectorStateHidden,
+			Timeout: playwright.Float(1000 * 60), // 최대 1분 대기
+		})
+		fmt.Println("   ✓ 진입 중...")
+	}
+
+	wait(1)
+
 	// 모든 tr을 확인합니다. 각 tr에서 4번째 td가 10:37을 텍스트로 가지고 5번째 td가 12:07을 텍스트로 가진다면 예약 가능한 열차로 확인.
 	trs, err := page.Locator("tbody > tr").All()
 	if err != nil {
