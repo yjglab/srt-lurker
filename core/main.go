@@ -21,11 +21,15 @@ import (
 // ===================================================================
 
 // must: 에러 체크 헬퍼 함수
-// 에러 발생 시 프로그램 종료 및 메시지 출력
 func must(message string, err error) {
 	if err != nil {
 		log.Fatalf(message, err)
 	}
+}
+
+// wait: 대기 함수 (초 단위)
+func wait(seconds int) {
+	time.Sleep(time.Duration(seconds) * time.Second)
 }
 
 // eq: 값 비교 헬퍼 함수
@@ -37,157 +41,365 @@ func eq(expected, actual interface{}) {
 	}
 }
 
+// safeAction: 안전한 액션 실행 헬퍼
+func safeAction(action func() error, errorMsg string) error {
+	if err := action(); err != nil {
+		return fmt.Errorf("%s: %w", errorMsg, err)
+	}
+	return nil
+}
+
+// fillInput: 입력 필드 채우기 헬퍼 (클릭 → 입력 → 탭)
+func fillInput(page playwright.Page, selector, value, fieldName string) error {
+	input := page.Locator(selector)
+
+	if err := safeAction(func() error { return input.Click() }, fieldName+" 클릭 실패"); err != nil {
+		return err
+	}
+	if err := safeAction(func() error { return input.Fill("") }, fieldName+" 입력 비우기 실패"); err != nil {
+		return err
+	}
+	if err := safeAction(func() error { return input.Fill(value) }, fieldName+" 입력 실패"); err != nil {
+		return err
+	}
+	if err := safeAction(func() error { return input.Press("Tab") }, fieldName+" 확정 실패"); err != nil {
+		return err
+	}
+
+	return nil
+}
+
+// selectOption: 셀렉트 옵션 선택 헬퍼
+func selectOption(page playwright.Page, selector, value, fieldName string) error {
+	_, err := page.Locator(selector).SelectOption(playwright.SelectOptionValues{
+		Values: playwright.StringSlice(value),
+	})
+	return safeAction(func() error { return err }, fieldName+" 선택 실패")
+}
+
+// clickButton: 버튼 클릭 헬퍼
+func clickButton(page playwright.Page, selector, buttonName string) error {
+	button := page.Locator(selector)
+	if err := safeAction(func() error { return button.Click() }, buttonName+" 클릭 실패"); err != nil {
+		return err
+	}
+	return nil
+}
+
+// checkElementExists: 요소 존재 확인 헬퍼
+func checkElementExists(page playwright.Page, selector, elementName string) error {
+	count, err := page.Locator(selector).Count()
+	if err != nil {
+		return fmt.Errorf("%s 확인 실패: %w", elementName, err)
+	}
+	if count == 0 {
+		return fmt.Errorf("%s가 존재하지 않습니다", elementName)
+	}
+	return nil
+}
+
+// setupDialogHandler: 대화상자 처리 헬퍼
+func setupDialogHandler(page playwright.Page, acceptDialog bool) {
+	page.OnDialog(func(dialog playwright.Dialog) {
+		fmt.Printf("   > 대화상자 감지: %s\n", dialog.Message())
+
+		if acceptDialog {
+			fmt.Println("   > 자동으로 '확인' 클릭")
+			dialog.Accept()
+		} else {
+			fmt.Println("   > 자동으로 '취소' 클릭")
+			dialog.Dismiss()
+		}
+	})
+}
+
 // ===================================================================
 // 상수 정의 구역
 // ===================================================================
-const initialURL = "https://etk.srail.kr/main.do"
+const (
+	initialURL = "https://etk.srail.kr/hpg/hra/01/selectScheduleList.do?pageId=TK0101010000"
+	maxRetries = 5 // 최대 재시도 횟수
+)
+
+// 필드 선택자 상수
+const (
+	dptStationSelector                = "input#dptRsStnCdNm"
+	arvStationSelector                = "input#arvRsStnCdNm"
+	dateSelector                      = "select#dptDt"
+	searchButtonSelector              = "input[value='조회하기']"
+	reserveButtonSelector             = "tbody > tr:nth-child(1) td:nth-child(7) > a > span:has-text('예약하기')"
+	unregisteredReserveButtonSelector = "a.btn_midium.btn_pastel1:has-text('미등록고객 예매')"
+
+	// 예약자 정보 입력 폼 선택자
+	passengerAgreeSelector = "input#agreeY"
+	passengerNameSelector  = "input#custNm"
+)
 
 // ===================================================================
-// 메인 함수 - 전체 테스트 시나리오 실행
+// 단계별 처리 함수들
+// ===================================================================
+
+// step1SetStations: 1단계 - 출발역/도착역 설정
+func step1SetStations(page playwright.Page) error {
+	fmt.Println("▶ 1단계: 출발역/도착역 설정")
+
+	fmt.Println("   > 출발역: 동탄")
+	if err := fillInput(page, dptStationSelector, "동탄", "출발역"); err != nil {
+		return err
+	}
+
+	fmt.Println("   > 도착역: 전주")
+	if err := fillInput(page, arvStationSelector, "전주", "도착역"); err != nil {
+		return err
+	}
+
+	fmt.Println("   ✓ 출발역/도착역 설정 완료")
+	return nil
+}
+
+// step2SetDate: 2단계 - 출발 날짜 설정
+func step2SetDate(page playwright.Page) error {
+	fmt.Println("▶ 2단계: 출발 날짜 설정")
+	if err := selectOption(page, dateSelector, "20250622", "날짜"); err != nil {
+		return err
+	}
+	fmt.Println("   ✓ 출발 날짜 설정 완료")
+	return nil
+}
+
+// step3SearchTrains: 3단계 - 열차 조회
+func step3SearchTrains(page playwright.Page) error {
+	fmt.Println("▶ 3단계: 열차 조회")
+	if err := clickButton(page, searchButtonSelector, "조회 버튼"); err != nil {
+		return err
+	}
+	wait(1) // 조회 결과 로딩 대기
+	fmt.Println("   ✓ 조회 완료")
+	return nil
+}
+
+// step4CheckAvailability: 4단계 - 예약 가능한 열차 확인
+func step4CheckAvailability(page playwright.Page) error {
+	fmt.Println("▶ 4단계: 예약 가능 열차 확인")
+	if err := checkElementExists(page, reserveButtonSelector, "예약 버튼"); err != nil {
+		return err
+	}
+	return nil
+}
+
+// step5ClickReserve: 5단계 - 예약 시도
+func step5ClickReserve(page playwright.Page) error {
+	fmt.Println("▶ 5단계: 예약 시도")
+	if err := clickButton(page, reserveButtonSelector, "예약 버튼"); err != nil {
+		return err
+	}
+	return nil
+}
+
+// step6GoToUnregistered: 6-1단계 - 미등록고객 예매 페이지로 이동
+func step6GoToUnregistered(page playwright.Page) error {
+	wait(1)
+	fmt.Println("▶ 6-1단계: 미등록고객 예매 페이지로 이동")
+
+	// confirm 대화상자 핸들러 설정 (자동으로 "확인" 클릭)
+	setupDialogHandler(page, true)
+
+	// 미등록고객 예매라는 텍스트를 가지며 btn_midium btn_pastel1라는 클래스를 가진 a 태그 클릭
+	if err := clickButton(page, unregisteredReserveButtonSelector, "미등록고객 예매 버튼"); err != nil {
+		return err
+	}
+
+	fmt.Println("   ✓ 미등록고객 예매 버튼 클릭 및 대화상자 처리 완료")
+	return nil
+}
+
+// step7VerifyReservationPage: 7단계 - 예약자 정보 입력 화면으로 이동
+func step7VerifyReservationPage(page playwright.Page) error {
+	currentURL := page.URL()
+	if !strings.Contains(currentURL, "selectReservationForm") {
+		return fmt.Errorf("예약 페이지로 이동하지 못했습니다 (현재 URL: %s)", currentURL)
+	}
+
+	fmt.Println("   ✓ 예약자 정보 입력 화면으로 이동 완료")
+	return nil
+}
+
+// step8FillPassengerInfo: 8단계 - 예약자 정보폼에 정보 입력
+func step8FillPassengerInfo(page playwright.Page) error {
+	fmt.Println("▶ 8단계: 예약자 정보폼에 정보 입력")
+
+	// 동의 체크박스 클릭
+	if err := clickButton(page, passengerAgreeSelector, "개인정보수집 동의 체크박스"); err != nil {
+		return err
+	}
+
+	// 이름 입력
+	if err := fillInput(page, passengerNameSelector, "홍길동", "예약자 이름"); err != nil {
+		return err
+	}
+
+	// Tab으로 이동하며 순차적으로 입력
+	inputValues := []struct {
+		value string
+		desc  string
+	}{
+		{"010", "전화번호 앞자리"},
+		{"1234", "전화번호 중간자리"},
+		{"5678", "전화번호 뒷자리"},
+		{"12345", "비밀번호"},
+		{"12345", "비밀번호 확인"},
+	}
+
+	for _, input := range inputValues {
+		// 현재 포커스된 요소에 입력
+		if err := page.Keyboard().Type(input.value); err != nil {
+			return fmt.Errorf("%s 입력 실패: %w", input.desc, err)
+		}
+		fmt.Printf("   ✓ %s 입력 완료\n", input.desc)
+
+		// Tab으로 다음 필드로 이동
+		if err := page.Keyboard().Press("Tab"); err != nil {
+			return fmt.Errorf("%s 입력 후 Tab 이동 실패: %w", input.desc, err)
+		}
+	}
+
+	fmt.Println("   ✓ 예약자 정보폼에 정보 입력 완료")
+	return nil
+}
+
+// step9SubmitForm: 9단계 - 예약자 정보폼 제출 확인
+func step9SubmitForm(page playwright.Page) error {
+	fmt.Println("▶ 9단계: 예약자 정보폼 제출 확인")
+
+	// 예약자 정보폼 제출 버튼 클릭
+	if err := page.Keyboard().Press("Enter"); err != nil {
+		return fmt.Errorf("확인 버튼 클릭 실패: %w", err)
+	}
+	setupDialogHandler(page, true)
+
+	fmt.Println("   ✓ 예약자 정보폼 제출 완료")
+	return nil
+}
+
+// ===================================================================
+// 예약 시도 함수
+// ===================================================================
+func attemptReservation(page playwright.Page, attempt int) error {
+	fmt.Printf("\n↻ 시도 %d/%d 시작...\n", attempt, maxRetries)
+	fmt.Println("=" + strings.Repeat("=", 50))
+
+	// 페이지 새로고침으로 초기화 (2번째 시도부터)
+	if attempt > 1 {
+		fmt.Println("⟳ 페이지 새로고침...")
+		if _, err := page.Reload(); err != nil {
+			return fmt.Errorf("페이지 새로고침 실패: %w", err)
+		}
+		wait(3)
+	}
+
+	// 단계별 실행
+	if err := step1SetStations(page); err != nil {
+		return err
+	}
+	if err := step2SetDate(page); err != nil {
+		return err
+	}
+	if err := step3SearchTrains(page); err != nil {
+		return err
+	}
+	if err := step4CheckAvailability(page); err != nil {
+		return err
+	}
+	if err := step5ClickReserve(page); err != nil {
+		return err
+	}
+	if err := step6GoToUnregistered(page); err != nil {
+		return err
+	}
+	if err := step7VerifyReservationPage(page); err != nil {
+		return err
+	}
+	if err := step8FillPassengerInfo(page); err != nil {
+		return err
+	}
+	// if err := step9SubmitForm(page); err != nil {
+	// 	return err
+	// }
+
+	fmt.Println("   ✨ 예약 페이지로 이동 성공!")
+	return nil
+}
+
+// ===================================================================
+// 메인 함수 - SRT 예약 자동화 (재시도 로직 포함)
 // ===================================================================
 func main() {
-	// 테스트 결과 메시지 출력을 위한 defer 함수
 	defer func() {
 		if r := recover(); r != nil {
-			fmt.Println("\n❌ 테스트 실패!")
-			fmt.Printf("실패 원인: %v\n", r)
-		} else {
-			fmt.Println("\n✅ 모든 테스트가 성공적으로 완료되었습니다!")
-			fmt.Println("이 실행기가 정상적으로 작동합니다.")
+			fmt.Println("\n⚠️ 치명적 오류 발생!")
+			fmt.Printf("오류 내용: %v\n", r)
 		}
 	}()
 
-	fmt.Println("🚀 테스트 시작...")
-	fmt.Println("=" + strings.Repeat("=", 50))
+	fmt.Println("▶ SRT 예약 자동화 시작...")
+	fmt.Printf("최대 %d회까지 재시도합니다.\n", maxRetries)
+	fmt.Println("=" + strings.Repeat("=", 60))
 
-	// ---------------------------------------------------------------
-	// 1. Playwright 초기화 및 브라우저 설정 구역
-	// ---------------------------------------------------------------
-	fmt.Println("✅ 1단계: Playwright 초기화 및 브라우저 설정")
-	pw, err := playwright.Run() // Playwright 런타임 시작
+	// 브라우저 초기화
+	fmt.Println("▶ 브라우저 초기화")
+	pw, err := playwright.Run()
+	must("Playwright 실행 실패: %w", err)
+
 	browser, err := pw.Chromium.Launch(playwright.BrowserTypeLaunchOptions{
-		Headless: playwright.Bool(false), // 헤드리스 모드 비활성화 (브라우저 창 표시)
+		Headless: playwright.Bool(false),
 	})
+	must("브라우저 실행 실패: %w", err)
 
-	must("크로미움 실행 실패: %w", err)
-	context, err := browser.NewContext() // 새 브라우저 컨텍스트 생성 (격리된 세션)
+	context, err := browser.NewContext()
 	must("브라우저 컨텍스트 생성 실패: %w", err)
-	page, err := context.NewPage() // 새 페이지 탭 생성
-	must("페이지 생성 실패: %w", err)
-	_, err = page.Goto(initialURL) // 대상 URL 이동
-	must("페이지 이동 실패: %w", err)
-	fmt.Println("   ✓ 브라우저 설정 및 페이지 로드 완료")
 
-	// ---------------------------------------------------------------
-	// 2. 헬퍼 함수 정의 구역 (페이지 내부 사용)
-	// ---------------------------------------------------------------
-	// shouldTaskCount: 할일 항목 개수 확인 함수
-	// 예상 개수와 실제 개수 일치 검증
-	// shouldTaskCount := func(shouldBeCount int) {
-	// 	targetCount, err := page.Locator("ul.todo-list > li").Count() // CSS 선택자로 할일 항목 카운트
-	// 	must("할일 목록 개수 확인 실패: %w", err)
-	// 	eq(shouldBeCount, targetCount) // 예상 vs 실제 개수 비교
-	// }
-	wait := func(ms int) {
-		time.Sleep(time.Duration(ms) * time.Second)
+	page, err := context.NewPage()
+	must("페이지 생성 실패: %w", err)
+
+	_, err = page.Goto(initialURL)
+	must("페이지 이동 실패: %w", err)
+
+	fmt.Println("   ✓ 브라우저 초기화 완료")
+	wait(1)
+
+	// 재시도 로직
+	var lastError error
+	for attempt := 1; attempt <= maxRetries; attempt++ {
+		err := attemptReservation(page, attempt)
+		if err == nil {
+			fmt.Printf("\n✨ 성공! %d번째 시도에서 예약에 성공했습니다!\n", attempt)
+			fmt.Println("ℹ️ 10분 안에 결제를 진행하세요. 이후 브라우저가 자동으로 종료됩니다.")
+
+			// 성공 시 10분 대기 후 종료
+			wait(600)
+			break
+		}
+
+		lastError = err
+		fmt.Printf("✗ 시도 %d 실패: %v\n", attempt, err)
+
+		if attempt < maxRetries {
+			waitTime := attempt * 2 // 점진적으로 대기 시간 증가
+			fmt.Printf("⏸️ %d초 후 재시도합니다...\n", waitTime)
+			wait(waitTime)
+		}
 	}
 
-	// ---------------------------------------------------------------
-	// 3. 초기 상태 확인 구역
-	// ---------------------------------------------------------------
-	fmt.Println("✅ 2단계: 조회 필드 설정")
-	// 페이지 로드 직후 할일 항목 0개 확인
-	_, dptFieldErr := page.Locator("select#dptRsStnCd").SelectOption(playwright.SelectOptionValues{Values: playwright.StringSlice("0045")})
-	_, arrFieldErr := page.Locator("select#arvRsStnCd").SelectOption(playwright.SelectOptionValues{Values: playwright.StringSlice("0552")})
-	must("출발역 선택 실패: %w", dptFieldErr)
-	must("도착역 선택 실패: %w", arrFieldErr)
-	fmt.Println("✓ 출발역/도착역 선택 완료")
-	wait(2)
+	// 모든 시도 실패 시
+	if lastError != nil {
+		fmt.Printf("\n⚠️ %d회 모든 시도가 실패했습니다!\n", maxRetries)
+		fmt.Printf("마지막 오류: %v\n", lastError)
+		fmt.Println("↻ 프로그램을 다시 실행해보거나 수동으로 예약을 시도하세요.")
+		wait(5)
+	}
 
-	// 달력 필드 클릭 및 날짜 입력
-	calendarField := page.Locator("input.calendar1")
-	must("달력 필드 클릭 실패: %w", calendarField.Click())
-	wait(1)
-	must("달력 필드 지우기 실패: %w", calendarField.Fill(""))
-	must("날짜 입력 실패: %w", calendarField.Fill("2025.06.07"))
-	must("Enter 키 입력 실패: %w", calendarField.Press("Enter"))
-	fmt.Println("✓ 출발 날짜 설정 완료")
-	wait(12)
-
-	// 	// ---------------------------------------------------------------
-	// 	// 4. 새로운 할일 추가 테스트 구역
-	// 	// ---------------------------------------------------------------
-	// 	fmt.Println("✅ 3단계: 새로운 할일 추가 테스트")
-	// 	newTodoInput := page.Locator("input.new-todo") // 할일 입력 필드 선택
-	// 	// 할일 추가 과정: 입력 필드 클릭 → 텍스트 입력 → Enter 키
-	// 	must("입력 필드 클릭 실패: %v", newTodoInput.Click())          // 입력 필드 클릭
-	// 	must("텍스트 입력 실패: %v", newTodoInput.Fill(taskName))     // 할일 내용 입력
-	// 	must("Enter 키 입력 실패: %v", newTodoInput.Press("Enter")) // Enter 키로 할일 추가
-
-	// 	// 할일 추가 후 개수 확인 (1개)
-	// 	shouldTaskCount(1)
-	// 	fmt.Printf("   ✓ 할일 항목 '%s' 추가 완료\n", taskName)
-
-	// 	// ---------------------------------------------------------------
-	// 	// 5. 추가된 할일 내용 검증 구역
-	// 	// ---------------------------------------------------------------
-	// 	fmt.Println("✅ 4단계: 추가된 할일 내용 검증")
-	// 	// 첫 번째 할일 항목 텍스트 내용과 입력 내용 일치 확인
-	// 	textContentOfFirstTodoEntry, err := page.Locator("ul.todo-list > li:nth-child(1) label").Evaluate("el => el.textContent", nil)
-	// 	must("첫 번째 할일 항목 텍스트 가져오기 실패: %w", err)
-	// 	eq(taskName, textContentOfFirstTodoEntry) // 입력 텍스트 vs 화면 텍스트 일치 확인
-	// 	fmt.Println("   ✓ 입력된 할일 내용이 화면에 정확히 표시됨")
-
-	// 	// ---------------------------------------------------------------
-	// 	// 6. 데이터 지속성 테스트 구역 (페이지 새로고침)
-	// 	// ---------------------------------------------------------------
-	// 	fmt.Println("✅ 5단계: 데이터 지속성 테스트 (페이지 새로고침)")
-	// 	// 페이지 새로고침 후 할일 유지 확인
-	// 	_, err = page.Reload()
-	// 	// 새로고침 실패해도 다음 검증에서 확인
-	// 	shouldTaskCount(1) // 새로고침 후 1개 할일 유지 확인
-	// 	fmt.Println("   ✓ 페이지 새로고침 후에도 할일이 유지됨")
-
-	// 	// ---------------------------------------------------------------
-	// 	// 7. 할일 완료 처리 테스트 구역
-	// 	// ---------------------------------------------------------------
-	// 	fmt.Println("✅ 6단계: 할일 완료 처리 테스트")
-	// 	// 할일 완료 상태 변경 (체크박스 클릭)
-	// 	must("체크박스 클릭 실패: %v", page.Locator("input.toggle").Click())
-	// 	fmt.Println("   ✓ 할일을 완료 상태로 변경")
-
-	// 	// ---------------------------------------------------------------
-	// 	// 8. 필터링 기능 테스트 구역
-	// 	// ---------------------------------------------------------------
-	// 	fmt.Println("✅ 7단계: 필터링 기능 테스트")
-	// 	// 8-1. "Active" 필터 테스트
-	// 	// 활성(미완료) 할일만 표시 - 모든 할일 완료했으므로 0개
-	// 	page.Locator("text=Active").Click() // 클릭 실패해도 다음 검증에서 확인
-	// 	shouldTaskCount(0)                  // 미완료 할일 없음으로 0개
-	// 	fmt.Println("   ✓ Active 필터: 미완료 할일 없음 확인")
-
-	// 	// 8-2. "Completed" 필터 테스트
-	// 	// 완료된 할일만 표시 - 1개 완료된 할일 존재
-	// 	page.GetByRole("link", playwright.PageGetByRoleOptions{
-	// 		Name: "Completed",
-	// 	}).Click() // 클릭 실패해도 다음 검증에서 확인
-	// 	shouldTaskCount(1) // 완료된 할일 1개 표시
-	// 	fmt.Println("   ✓ Completed 필터: 완료된 할일 1개 확인")
-
-	// 	// ---------------------------------------------------------------
-	// 	// 9. 완료된 할일 삭제 테스트 구역
-	// 	// ---------------------------------------------------------------
-	// 	fmt.Println("✅ 8단계: 완료된 할일 삭제 테스트")
-	// 	// "Clear completed" 버튼으로 완료된 할일 전체 삭제
-	// 	page.Locator("text=Clear completed").Click() // 클릭 실패해도 다음 검증에서 확인
-	// 	shouldTaskCount(0)                           // 완료된 할일 삭제 후 0개
-	// 	fmt.Println("   ✓ 완료된 할일이 성공적으로 삭제됨")
-
-	// // ---------------------------------------------------------------
-	// // 10. 정리 작업 구역 (리소스 해제)
-	// // ---------------------------------------------------------------
-	// fmt.Println("✅ 9단계: 리소스 정리")
-	// browser.Close() // 브라우저 종료 (실패해도 프로그램 종료로 정리됨)
-	// pw.Stop()       // Playwright 런타임 종료
-	// fmt.Println("   ✓ 브라우저 종료 및 리소스 정리 완료")
+	// 정리 작업
+	browser.Close()
+	pw.Stop()
+	fmt.Println("   ✓ 리소스 정리 완료")
 }
