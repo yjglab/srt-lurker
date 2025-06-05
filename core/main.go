@@ -118,8 +118,30 @@ func setupDialogHandler(page playwright.Page, acceptDialog bool) {
 // ===================================================================
 const (
 	initialURL = "https://etk.srail.kr/hpg/hra/01/selectScheduleList.do?pageId=TK0101010000"
-	maxRetries = 5 // 최대 재시도 횟수
+	maxRetries = 10 // 최대 재시도 횟수
 )
+
+var passengerInfo = struct {
+	deptStation     string
+	arrivalStation  string
+	deptTime        string
+	arrivalTime     string
+	date            string
+	name            string
+	phone           string
+	password        string
+	passwordConfirm string
+}{
+	deptStation:     "동탄",
+	arrivalStation:  "전주",
+	deptTime:        "19:26",
+	arrivalTime:     "20:51",
+	date:            "20250622",
+	name:            "홍길동",
+	phone:           "01012345678",
+	password:        "123456",
+	passwordConfirm: "123456",
+}
 
 // 필드 선택자 상수
 const (
@@ -127,7 +149,6 @@ const (
 	arvStationSelector                = "input#arvRsStnCdNm"
 	dateSelector                      = "select#dptDt"
 	searchButtonSelector              = "input[value='조회하기']"
-	reserveButtonSelector             = "tbody > tr:nth-child(1) td:nth-child(7) > a > span:has-text('예약하기')"
 	unregisteredReserveButtonSelector = "a.btn_midium.btn_pastel1:has-text('미등록고객 예매')"
 
 	// 예약자 정보 입력 폼 선택자
@@ -143,13 +164,13 @@ const (
 func step1SetStations(page playwright.Page) error {
 	fmt.Println("▶ 1단계: 출발역/도착역 설정")
 
-	fmt.Println("   > 출발역: 동탄")
-	if err := fillInput(page, dptStationSelector, "동탄", "출발역"); err != nil {
+	fmt.Println("   > 출발역: ", passengerInfo.deptStation)
+	if err := fillInput(page, dptStationSelector, passengerInfo.deptStation, "출발역"); err != nil {
 		return err
 	}
 
-	fmt.Println("   > 도착역: 전주")
-	if err := fillInput(page, arvStationSelector, "전주", "도착역"); err != nil {
+	fmt.Println("   > 도착역: ", passengerInfo.arrivalStation)
+	if err := fillInput(page, arvStationSelector, passengerInfo.arrivalStation, "도착역"); err != nil {
 		return err
 	}
 
@@ -160,7 +181,7 @@ func step1SetStations(page playwright.Page) error {
 // step2SetDate: 2단계 - 출발 날짜 설정
 func step2SetDate(page playwright.Page) error {
 	fmt.Println("▶ 2단계: 출발 날짜 설정")
-	if err := selectOption(page, dateSelector, "20250622", "날짜"); err != nil {
+	if err := selectOption(page, dateSelector, passengerInfo.date, "날짜"); err != nil {
 		return err
 	}
 	fmt.Println("   ✓ 출발 날짜 설정 완료")
@@ -173,7 +194,7 @@ func step3SearchTrains(page playwright.Page) error {
 	if err := clickButton(page, searchButtonSelector, "조회 버튼"); err != nil {
 		return err
 	}
-	wait(1) // 조회 결과 로딩 대기
+	wait(3) // 조회 결과 로딩 대기
 	fmt.Println("   ✓ 조회 완료")
 	return nil
 }
@@ -181,19 +202,92 @@ func step3SearchTrains(page playwright.Page) error {
 // step4CheckAvailability: 4단계 - 예약 가능한 열차 확인
 func step4CheckAvailability(page playwright.Page) error {
 	fmt.Println("▶ 4단계: 예약 가능 열차 확인")
-	if err := checkElementExists(page, reserveButtonSelector, "예약 버튼"); err != nil {
+	// 모든 tr을 확인합니다. 각 tr에서 4번째 td가 10:37을 텍스트로 가지고 5번째 td가 12:07을 텍스트로 가진다면 예약 가능한 열차로 확인.
+	trs, err := page.Locator("tbody > tr").All()
+	if err != nil {
 		return err
 	}
-	return nil
+
+	for _, tr := range trs {
+		tds, err := tr.Locator("td").All()
+		if err != nil {
+			return err
+		}
+
+		if len(tds) < 5 {
+			continue
+		}
+
+		// TextContent() 메서드의 에러 처리
+		dept, err := tds[3].Locator("em").TextContent()
+		if err != nil {
+			continue
+		}
+		arrival, err := tds[4].Locator("em").TextContent()
+		if err != nil {
+			continue
+		}
+
+		fmt.Println(dept, arrival)
+
+		if strings.Contains(dept, passengerInfo.deptTime) && strings.Contains(arrival, passengerInfo.arrivalTime) {
+			fmt.Println("   ✓ 예약 가능한 열차 발견")
+			return nil
+		}
+	}
+
+	return fmt.Errorf("예약 가능한 열차를 찾을 수 없습니다")
 }
 
 // step5ClickReserve: 5단계 - 예약 시도
 func step5ClickReserve(page playwright.Page) error {
 	fmt.Println("▶ 5단계: 예약 시도")
-	if err := clickButton(page, reserveButtonSelector, "예약 버튼"); err != nil {
+	// 19:26 -> 20:51 열차의 예약하기 버튼 클릭
+	trs, err := page.Locator("tbody > tr").All()
+	if err != nil {
 		return err
 	}
-	return nil
+
+	for _, tr := range trs {
+		tds, err := tr.Locator("td").All()
+		if err != nil {
+			continue
+		}
+
+		if len(tds) < 7 {
+			continue
+		}
+
+		// TextContent() 메서드의 에러 처리
+		dept, err := tds[3].Locator("em").TextContent()
+		if err != nil {
+			continue
+		}
+		arrival, err := tds[4].Locator("em").TextContent()
+		if err != nil {
+			continue
+		}
+
+		if strings.Contains(dept, passengerInfo.deptTime) && strings.Contains(arrival, passengerInfo.arrivalTime) {
+			// 매진 텍스트를 가진 요소가 있으면 예약 불가능하므로 에러 반환
+			fullText, err := tds[6].Locator("span:has-text('매진')").Count()
+			if err != nil {
+				continue
+			}
+			if fullText > 0 {
+				return fmt.Errorf("매진된 열차입니다 - 예매를 다시 시도합니다")
+			}
+
+			reserveButton := tds[6].Locator("a > span:has-text('예약하기')")
+			if err := reserveButton.Click(); err != nil {
+				continue
+			}
+			fmt.Println("   ✓ 예약하기 버튼 클릭 완료")
+			return nil
+		}
+	}
+
+	return fmt.Errorf("예약하기 버튼을 찾을 수 없습니다")
 }
 
 // step6GoToUnregistered: 6-1단계 - 미등록고객 예매 페이지로 이동
@@ -234,7 +328,7 @@ func step8FillPassengerInfo(page playwright.Page) error {
 	}
 
 	// 이름 입력
-	if err := fillInput(page, passengerNameSelector, "홍길동", "예약자 이름"); err != nil {
+	if err := fillInput(page, passengerNameSelector, passengerInfo.name, "예약자 이름"); err != nil {
 		return err
 	}
 
@@ -243,11 +337,11 @@ func step8FillPassengerInfo(page playwright.Page) error {
 		value string
 		desc  string
 	}{
-		{"010", "전화번호 앞자리"},
-		{"1234", "전화번호 중간자리"},
-		{"5678", "전화번호 뒷자리"},
-		{"12345", "비밀번호"},
-		{"12345", "비밀번호 확인"},
+		{passengerInfo.phone[:3], "전화번호 앞자리"},
+		{passengerInfo.phone[3:7], "전화번호 중간자리"},
+		{passengerInfo.phone[7:], "전화번호 뒷자리"},
+		{passengerInfo.password, "비밀번호"},
+		{passengerInfo.passwordConfirm, "비밀번호 확인"},
 	}
 
 	for _, input := range inputValues {
@@ -310,6 +404,7 @@ func attemptReservation(page playwright.Page, attempt int) error {
 	if err := step4CheckAvailability(page); err != nil {
 		return err
 	}
+	wait(3)
 	if err := step5ClickReserve(page); err != nil {
 		return err
 	}
@@ -384,7 +479,7 @@ func main() {
 		fmt.Printf("✗ 시도 %d 실패: %v\n", attempt, err)
 
 		if attempt < maxRetries {
-			waitTime := attempt * 2 // 점진적으로 대기 시간 증가
+			waitTime := 3
 			fmt.Printf("⏸️ %d초 후 재시도합니다...\n", waitTime)
 			wait(waitTime)
 		}
