@@ -7,9 +7,14 @@
 package main
 
 import (
-	"fmt" // 포맷된 문자열 출력
-	"log" // 로깅 기능
-	"os"  // 환경변수 읽기용
+	"bufio"   // 사용자 입력 처리용
+	"fmt"     // 포맷된 문자열 출력
+	"log"     // 로깅 기능
+	"os"      // 환경변수 읽기용
+	"regexp"  // 정규표현식 검증용
+	"strconv" // 문자열을 숫자로 변환용
+	"strings" // 문자열 조작용
+	"time"    // 시간 조작용
 
 	// 문자열을 숫자로 변환용
 	// 이메일 발송용
@@ -17,8 +22,6 @@ import (
 	// 환경변수 읽기용
 	"reflect" // 타입 비교용 리플렉션
 	// 문자열 변환용
-	"strings" // 문자열 조작용
-	"time"    // 시간 조작용
 
 	// .env 파일 로드용
 	"github.com/joho/godotenv"                      // .env 파일 로드용
@@ -139,22 +142,20 @@ var passengerInfo = struct {
 	name                string
 	phone               string
 	password            string
-	passwordConfirm     string
 	notificationEmail   string
 	notificationEnabled bool
 }{
-	deptStation:     "동탄",
-	arrivalStation:  "전주",
-	deptTime:        "10:37",
-	arrivalTime:     "12:07",
-	date:            "20250622",
-	name:            "홍길동",
-	phone:           "01012345678",
-	password:        "123456",
-	passwordConfirm: "123456",
-	// email 발송 희망하는 경우
-	notificationEmail:   "jkethics@naver.com",
-	notificationEnabled: true,
+	// 초기값은 빈 값으로 설정 - 사용자 입력으로 채움
+	deptStation:         "",
+	arrivalStation:      "",
+	deptTime:            "",
+	arrivalTime:         "",
+	date:                "",
+	name:                "",
+	phone:               "",
+	password:            "",
+	notificationEmail:   "",
+	notificationEnabled: false,
 }
 
 // 이메일 설정
@@ -186,6 +187,274 @@ const (
 	passengerAgreeSelector = "input#agreeY"
 	passengerNameSelector  = "input#custNm"
 )
+
+// ===================================================================
+// 사용자 입력 처리 함수들
+// ===================================================================
+
+// printHeader: 메인 헤더 출력
+func printHeader(title string) {
+	fmt.Println()
+	fmt.Println("🚄 " + strings.Repeat("=", 50))
+	fmt.Printf("   %s\n", title)
+	fmt.Println("   " + strings.Repeat("=", 50))
+	fmt.Println()
+}
+
+// printSubHeader: 서브 헤더 출력
+func printSubHeader(title string) {
+	fmt.Println()
+	fmt.Printf("📋 %s\n", title)
+	fmt.Println("   " + strings.Repeat("-", 30))
+}
+
+// getUserInput: 사용자 입력 받기 (기본값 지원)
+func getUserInput(prompt, defaultValue, example string) string {
+	reader := bufio.NewReader(os.Stdin)
+
+	if defaultValue != "" {
+		fmt.Printf("   %s [기본값: %s]: ", prompt, defaultValue)
+	} else {
+		fmt.Printf("   %s: ", prompt)
+	}
+
+	if example != "" {
+		fmt.Printf("\n   💡 예시: %s\n   입력: ", example)
+	}
+
+	input, _ := reader.ReadString('\n')
+	input = strings.TrimSpace(input)
+
+	if input == "" && defaultValue != "" {
+		return defaultValue
+	}
+
+	return input
+}
+
+// validateRequired: 필수 입력 검증
+func validateRequired(value, fieldName string) bool {
+	if strings.TrimSpace(value) == "" {
+		fmt.Printf("   ❌ %s는 필수 입력 항목입니다.\n\n", fieldName)
+		return false
+	}
+	return true
+}
+
+// validatePhone: 전화번호 검증
+func validatePhone(phone string) bool {
+	// 숫자만 11자리인지 확인
+	re := regexp.MustCompile(`^010\d{8}$`)
+	if !re.MatchString(phone) {
+		fmt.Println("   ❌ 전화번호는 010으로 시작하는 11자리 숫자여야 합니다.")
+		fmt.Println("   💡 예시: 01012345678")
+		fmt.Println()
+		return false
+	}
+	return true
+}
+
+// validateTime: 시간 형식 검증
+func validateTime(timeStr string) bool {
+	// HH:MM 형식인지 확인
+	re := regexp.MustCompile(`^\d{2}:\d{2}$`)
+	if !re.MatchString(timeStr) {
+		fmt.Println("   ❌ 시간은 HH:MM 형식으로 입력해주세요.")
+		fmt.Println("   💡 예시: 10:37")
+		fmt.Println()
+		return false
+	}
+	return true
+}
+
+// validateDate: 날짜 형식 검증
+func validateDate(dateStr string) bool {
+	// YYYYMMDD 형식인지 확인
+	re := regexp.MustCompile(`^\d{8}$`)
+	if !re.MatchString(dateStr) {
+		fmt.Println("   ❌ 날짜는 YYYYMMDD 형식으로 입력해주세요.")
+		fmt.Println("   💡 예시: 20250622")
+		fmt.Println()
+		return false
+	}
+
+	// 날짜가 유효한지 확인
+	if _, err := time.Parse("20060102", dateStr); err != nil {
+		fmt.Println("   ❌ 유효하지 않은 날짜입니다.")
+		fmt.Println()
+		return false
+	}
+
+	return true
+}
+
+// validateEmail: 이메일 형식 검증
+func validateEmail(email string) bool {
+	if email == "" {
+		return true // 이메일은 선택사항
+	}
+
+	re := regexp.MustCompile(`^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$`)
+	if !re.MatchString(email) {
+		fmt.Println("   ❌ 올바른 이메일 형식이 아닙니다.")
+		fmt.Println("   💡 예시: example@gmail.com")
+		fmt.Println()
+		return false
+	}
+	return true
+}
+
+// getInputWithValidation: 검증과 함께 입력 받기
+func getInputWithValidation(prompt, defaultValue, example string, validator func(string) bool) string {
+	for {
+		input := getUserInput(prompt, defaultValue, example)
+		if validator(input) {
+			return input
+		}
+	}
+}
+
+// getYesNoInput: Y/N 입력 받기
+func getYesNoInput(prompt string, defaultValue bool) bool {
+	defaultStr := "N"
+	if defaultValue {
+		defaultStr = "Y"
+	}
+
+	for {
+		input := getUserInput(prompt+" (Y/N)", defaultStr, "")
+		input = strings.ToUpper(strings.TrimSpace(input))
+
+		if input == "Y" || input == "y" {
+			return true
+		} else if input == "N" || input == "n" {
+			return false
+		} else {
+			fmt.Println("   ❌ Y 또는 N으로 입력해주세요.")
+			fmt.Println()
+		}
+	}
+}
+
+// collectUserInput: 사용자로부터 모든 예약 정보 수집
+func collectUserInput() {
+	printHeader("SRT 미등록고객 예약 시스템")
+	fmt.Println("   🎯 예약에 필요한 정보를 입력해주세요.")
+	fmt.Println("   ℹ️  각 항목에 대한 예시를 참고하여 정확히 입력해주세요.")
+
+	// 역 정보 입력
+	printSubHeader("🚉 역 정보")
+	passengerInfo.deptStation = getInputWithValidation(
+		"출발역을 입력하세요",
+		"",
+		"동탄, 수서, 광명, 천안아산 등",
+		func(s string) bool { return validateRequired(s, "출발역") },
+	)
+
+	passengerInfo.arrivalStation = getInputWithValidation(
+		"도착역을 입력하세요",
+		"",
+		"전주, 익산, 정읍, 광주송정 등",
+		func(s string) bool { return validateRequired(s, "도착역") },
+	)
+
+	// 시간 정보 입력
+	printSubHeader("⏰ 시간 정보")
+	passengerInfo.deptTime = getInputWithValidation(
+		"출발시간을 입력하세요",
+		"",
+		"10:37",
+		func(s string) bool { return validateRequired(s, "출발시간") && validateTime(s) },
+	)
+
+	passengerInfo.arrivalTime = getInputWithValidation(
+		"도착시간을 입력하세요",
+		"",
+		"12:07",
+		func(s string) bool { return validateRequired(s, "도착시간") && validateTime(s) },
+	)
+
+	passengerInfo.date = getInputWithValidation(
+		"출발날짜를 입력하세요",
+		"",
+		"20250622",
+		func(s string) bool { return validateRequired(s, "출발날짜") && validateDate(s) },
+	)
+
+	// 예약자 정보 입력
+	printSubHeader("👤 예약자 정보")
+	passengerInfo.name = getInputWithValidation(
+		"예약자 이름을 입력하세요",
+		"",
+		"홍길동",
+		func(s string) bool { return validateRequired(s, "예약자 이름") },
+	)
+
+	passengerInfo.phone = getInputWithValidation(
+		"전화번호를 입력하세요 (숫자만)",
+		"",
+		"01012345678",
+		func(s string) bool { return validateRequired(s, "전화번호") && validatePhone(s) },
+	)
+
+	// 비밀번호 입력
+	printSubHeader("🔐 비밀번호 설정")
+	passengerInfo.password = getInputWithValidation(
+		"비밀번호를 입력하세요 (5자리 숫자)",
+		"",
+		"12345",
+		func(s string) bool {
+			if !validateRequired(s, "비밀번호") {
+				return false
+			}
+			if len(s) != 5 {
+				fmt.Println("   ❌ 비밀번호는 5자리여야 합니다.")
+				fmt.Println()
+				return false
+			}
+			if _, err := strconv.Atoi(s); err != nil {
+				fmt.Println("   ❌ 비밀번호는 숫자만 입력 가능합니다.")
+				fmt.Println()
+				return false
+			}
+			return true
+		},
+	)
+
+	// 알림 설정
+	printSubHeader("📧 알림 설정")
+	passengerInfo.notificationEnabled = getYesNoInput("예약 완료 시 이메일 알림을 받으시겠습니까?", false)
+
+	if passengerInfo.notificationEnabled {
+		passengerInfo.notificationEmail = getInputWithValidation(
+			"알림받을 이메일 주소를 입력하세요",
+			"",
+			"example@gmail.com",
+			validateEmail,
+		)
+	}
+
+	// 입력 정보 확인
+	printSubHeader("✅ 입력 정보 확인")
+	fmt.Printf("    출발역: %s (%s)\n", passengerInfo.deptStation, passengerInfo.deptTime)
+	fmt.Printf("    도착역: %s (%s)\n", passengerInfo.arrivalStation, passengerInfo.arrivalTime)
+	fmt.Printf("    날짜: %s\n", passengerInfo.date)
+	fmt.Printf("    예약자: %s\n", passengerInfo.name)
+	fmt.Printf("    전화번호: %s\n", passengerInfo.phone)
+	if passengerInfo.notificationEnabled {
+		fmt.Printf("    알림 이메일: %s\n", passengerInfo.notificationEmail)
+	}
+	fmt.Println()
+
+	if !getYesNoInput("위 정보가 맞습니까?", true) {
+		fmt.Println("   🔄 정보를 다시 입력합니다.")
+		collectUserInput() // 재귀 호출로 다시 입력받기
+		return
+	}
+
+	fmt.Println("   ✅ 정보 확인 완료! 예약을 시작합니다.")
+	fmt.Println()
+}
 
 // ===================================================================
 // 단계별 처리 함수들
@@ -385,7 +654,7 @@ func step8FillPassengerInfo(page playwright.Page) error {
 		{passengerInfo.phone[3:7], "전화번호 중간자리"},
 		{passengerInfo.phone[7:], "전화번호 뒷자리"},
 		{passengerInfo.password, "비밀번호"},
-		{passengerInfo.passwordConfirm, "비밀번호 확인"},
+		{passengerInfo.password, "비밀번호 확인"},
 	}
 
 	for _, input := range inputValues {
@@ -481,6 +750,9 @@ func main() {
 			fmt.Printf("오류 내용: %v\n", r)
 		}
 	}()
+
+	// 사용자 입력 수집
+	collectUserInput()
 
 	fmt.Println("▶ SRT 예약 자동화 시작...")
 	fmt.Printf("최대 %d회까지 재시도합니다.\n", maxRetries)
