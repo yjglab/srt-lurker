@@ -1,3 +1,7 @@
 go.sum
-bin
+bin/
+dist/
 .env
+*.exe
+*.log
+dist.zip

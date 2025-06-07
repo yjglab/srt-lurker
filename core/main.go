@@ -9,6 +9,7 @@ import (
 	"log"
 	"net/smtp"
 	"os"
+	"path/filepath"
 	"regexp"
 	"strconv"
 	"strings"
@@ -1314,9 +1315,29 @@ func sendNotificationEmail(success bool, message string) error {
 // ═══════════════════════════════════════════════════════════════════════════════
 
 func loadConfig() {
-	if err := godotenv.Load(); err != nil {
-		fmt.Println("⚠️ .env 파일을 찾을 수 없어요. 기본값을 사용할게요")
-		return
+	// 실행 파일의 디렉토리를 가져와서 .env 파일 경로 설정
+	execPath, err := os.Executable()
+	if err != nil {
+		fmt.Println("⚠️ 실행 파일 경로를 찾을 수 없어요. 현재 디렉토리에서 .env를 찾을게요")
+		// 기본 방식으로 fallback
+		if err := godotenv.Load(); err != nil {
+			fmt.Println("⚠️ .env 파일을 찾을 수 없어요. 기본값을 사용할게요")
+		}
+	} else {
+		// 실행 파일과 같은 디렉토리의 .env 파일 경로
+		execDir := filepath.Dir(execPath)
+		envPath := filepath.Join(execDir, ".env")
+
+		if err := godotenv.Load(envPath); err != nil {
+			// 실행 파일 디렉토리에서 못 찾으면 현재 디렉토리에서 시도
+			if err := godotenv.Load(); err != nil {
+				fmt.Println("⚠️ .env 파일을 찾을 수 없어요. 기본값을 사용할게요")
+			} else {
+				fmt.Println("✅ 현재 디렉토리에서 .env 파일을 로드했어요")
+			}
+		} else {
+			fmt.Printf("✅ %s에서 .env 파일을 로드했어요\n", execDir)
+		}
 	}
 
 	// 이메일 설정 로드
