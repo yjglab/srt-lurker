@@ -7,19 +7,18 @@
 package main
 
 import (
-	"bufio"   // 사용자 입력 처리용
-	"fmt"     // 포맷된 문자열 출력
-	"log"     // 로깅 기능
-	"os"      // 환경변수 읽기용
-	"regexp"  // 정규표현식 검증용
-	"strconv" // 문자열을 숫자로 변환용
-	"strings" // 문자열 조작용
-	"time"    // 시간 조작용
+	"bufio"    // 사용자 입력 처리용
+	"fmt"      // 포맷된 문자열 출력
+	"log"      // 로깅 기능
+	"net/smtp" // SMTP 패키지
+	"os"       // 환경변수 읽기용
+	"regexp"   // 정규표현식 검증용
+	"strconv"  // 문자열을 숫자로 변환용
+	"strings"  // 문자열 조작용
+	"time"     // 시간 조작용
 
 	// 문자열을 숫자로 변환용
 	// 이메일 발송용
-	"net/smtp" // SMTP 패키지
-	// 환경변수 읽기용
 	"reflect" // 타입 비교용 리플렉션
 	// 문자열 변환용
 
@@ -188,6 +187,13 @@ const (
 	passengerNameSelector  = "input#custNm"
 )
 
+// SRT 역 목록
+var srtStations = []string{
+	"수서", "동탄", "평택지제", "천안아산", "오송", "대전", "김천구미", "동대구",
+	"경주", "울산", "부산", "광명", "서대전", "익산", "정읍", "광주송정", "전주",
+	"남원", "곡성", "구례구", "순천", "여천", "여수EXPO", "신경주", "포항",
+}
+
 // ===================================================================
 // 사용자 입력 처리 함수들
 // ===================================================================
@@ -342,24 +348,29 @@ func collectUserInput() {
 	fmt.Println("   🎯 예약에 필요한 정보를 입력해주세요.")
 	fmt.Println("   ℹ️  각 항목에 대한 예시를 참고하여 정확히 입력해주세요.")
 
-	// 역 정보 입력
+	// 역 정보 선택 (대화형 메뉴)
 	printSubHeader("🚉 역 정보")
-	passengerInfo.deptStation = getInputWithValidation(
-		"출발역을 입력하세요",
-		"",
-		"동탄, 수서, 광명, 천안아산 등",
-		func(s string) bool { return validateRequired(s, "출발역") },
-	)
+	fmt.Println("   출발역을 선택해주세요...")
+	time.Sleep(1 * time.Second)
+	passengerInfo.deptStation = selectStation("출발역을 선택하세요")
 
-	passengerInfo.arrivalStation = getInputWithValidation(
-		"도착역을 입력하세요",
-		"",
-		"전주, 익산, 정읍, 광주송정 등",
-		func(s string) bool { return validateRequired(s, "도착역") },
-	)
+	fmt.Printf("   ✅ 출발역: %s\n", passengerInfo.deptStation)
+	fmt.Println("   도착역을 선택해주세요...")
+	time.Sleep(1 * time.Second)
+	passengerInfo.arrivalStation = selectStation("도착역을 선택하세요")
+
+	fmt.Printf("   ✅ 도착역: %s\n", passengerInfo.arrivalStation)
+	fmt.Println()
 
 	// 시간 정보 입력
 	printSubHeader("⏰ 시간 정보")
+	passengerInfo.date = getInputWithValidation(
+		"출발날짜를 입력하세요",
+		"",
+		"20250622",
+		func(s string) bool { return validateRequired(s, "출발날짜") && validateDate(s) },
+	)
+
 	passengerInfo.deptTime = getInputWithValidation(
 		"출발시간을 입력하세요",
 		"",
@@ -374,12 +385,6 @@ func collectUserInput() {
 		func(s string) bool { return validateRequired(s, "도착시간") && validateTime(s) },
 	)
 
-	passengerInfo.date = getInputWithValidation(
-		"출발날짜를 입력하세요",
-		"",
-		"20250622",
-		func(s string) bool { return validateRequired(s, "출발날짜") && validateDate(s) },
-	)
 
 	// 예약자 정보 입력
 	printSubHeader("👤 예약자 정보")
@@ -448,7 +453,7 @@ func collectUserInput() {
 
 	if !getYesNoInput("위 정보가 맞습니까?", true) {
 		fmt.Println("   🔄 정보를 다시 입력합니다.")
-		collectUserInput() // 재귀 호출로 다시 입력받기
+		collectUserInput()
 		return
 	}
 
@@ -460,8 +465,8 @@ func collectUserInput() {
 // 단계별 처리 함수들
 // ===================================================================
 
-// step1SetStations: 1단계 - 출발역/도착역 설정
-func step1SetStations(page playwright.Page) error {
+// Step1_SetStations: 1단계 - 출발역/도착역 설정
+func Step1_SetStations(page playwright.Page) error {
 	fmt.Println("▶ 1단계: 출발역/도착역 설정")
 
 	fmt.Println("   > 출발역: ", passengerInfo.deptStation)
@@ -478,8 +483,8 @@ func step1SetStations(page playwright.Page) error {
 	return nil
 }
 
-// step2SetDate: 2단계 - 출발 날짜 설정
-func step2SetDate(page playwright.Page) error {
+// Step2_SetDate: 2단계 - 출발 날짜 설정
+func Step2_SetDate(page playwright.Page) error {
 	fmt.Println("▶ 2단계: 출발 날짜 설정")
 	if err := selectOption(page, dateSelector, passengerInfo.date, "날짜"); err != nil {
 		return err
@@ -488,8 +493,8 @@ func step2SetDate(page playwright.Page) error {
 	return nil
 }
 
-// step3SearchTrains: 3단계 - 열차 조회
-func step3SearchTrains(page playwright.Page) error {
+// Step3_SearchTrains: 3단계 - 열차 조회
+func Step3_SearchTrains(page playwright.Page) error {
 	fmt.Println("▶ 3단계: 열차 조회")
 	if err := clickButton(page, searchButtonSelector, "조회 버튼"); err != nil {
 		return err
@@ -499,8 +504,8 @@ func step3SearchTrains(page playwright.Page) error {
 	return nil
 }
 
-// step4CheckAvailability: 4단계 - 예약 가능한 열차 확인
-func step4CheckAvailability(page playwright.Page) error {
+// Step4_CheckAvailability: 4단계 - 예약 가능한 열차 확인
+func Step4_CheckAvailability(page playwright.Page) error {
 	fmt.Println("▶ 4단계: 예약 가능 열차 확인")
 	// 만약 div#NetFunnel_Skin_Top 가 나온다면 진입 대기중이므로 없어질 때까지 기다림.
 	netfunnelLocator := page.Locator("div#NetFunnel_Skin_Top")
@@ -552,8 +557,8 @@ func step4CheckAvailability(page playwright.Page) error {
 	return fmt.Errorf("예약 가능한 열차를 찾을 수 없습니다")
 }
 
-// step5ClickReserve: 5단계 - 예약 시도
-func step5ClickReserve(page playwright.Page) error {
+// Step5_ClickReserve: 5단계 - 예약 시도
+func Step5_ClickReserve(page playwright.Page) error {
 	fmt.Println("▶ 5단계: 예약 시도")
 	// 19:26 -> 20:51 열차의 예약하기 버튼 클릭
 	trs, err := page.Locator("tbody > tr").All()
@@ -603,8 +608,8 @@ func step5ClickReserve(page playwright.Page) error {
 	return fmt.Errorf("예약하기 버튼을 찾을 수 없습니다")
 }
 
-// step6GoToUnregistered: 6-1단계 - 미등록고객 예매 페이지로 이동
-func step6GoToUnregistered(page playwright.Page) error {
+// Step6_GoToUnregistered: 6-1단계 - 미등록고객 예매 페이지로 이동
+func Step6_GoToUnregistered(page playwright.Page) error {
 	wait(1)
 	fmt.Println("▶ 6-1단계: 미등록고객 예매 페이지로 이동")
 
@@ -620,8 +625,8 @@ func step6GoToUnregistered(page playwright.Page) error {
 	return nil
 }
 
-// step7VerifyReservationPage: 7단계 - 예약자 정보 입력 화면으로 이동
-func step7VerifyReservationPage(page playwright.Page) error {
+// Step7_VerifyReservationPage: 7단계 - 예약자 정보 입력 화면으로 이동
+func Step7_VerifyReservationPage(page playwright.Page) error {
 	currentURL := page.URL()
 	if !strings.Contains(currentURL, "selectReservationForm") {
 		return fmt.Errorf("예약 페이지로 이동하지 못했습니다 (현재 URL: %s)", currentURL)
@@ -631,8 +636,8 @@ func step7VerifyReservationPage(page playwright.Page) error {
 	return nil
 }
 
-// step8FillPassengerInfo: 8단계 - 예약자 정보폼에 정보 입력
-func step8FillPassengerInfo(page playwright.Page) error {
+// Step8_FillPassengerInfo: 8단계 - 예약자 정보폼에 정보 입력
+func Step8_FillPassengerInfo(page playwright.Page) error {
 	fmt.Println("▶ 8단계: 예약자 정보폼에 정보 입력")
 
 	// 동의 체크박스 클릭
@@ -674,8 +679,8 @@ func step8FillPassengerInfo(page playwright.Page) error {
 	return nil
 }
 
-// step9SubmitForm: 9단계 - 예약자 정보폼 제출 확인
-func step9SubmitForm(page playwright.Page) error {
+// Step9_SubmitForm: 9단계 - 예약자 정보폼 제출 확인
+func Step9_SubmitForm(page playwright.Page) error {
 	fmt.Println("▶ 9단계: 예약자 정보폼 제출 확인")
 
 	// 예약자 정보폼 제출 버튼 클릭
@@ -693,7 +698,7 @@ func step9SubmitForm(page playwright.Page) error {
 // ===================================================================
 func attemptReservation(page playwright.Page, attempt int) error {
 	fmt.Printf("\n↻ 시도 %d/%d 시작...\n", attempt, maxRetries)
-	fmt.Println("=" + strings.Repeat("=", 50))
+	fmt.Println(strings.Repeat("=", 50))
 
 	// 페이지 새로고침으로 초기화 (2번째 시도부터)
 	if attempt > 1 {
@@ -705,34 +710,27 @@ func attemptReservation(page playwright.Page, attempt int) error {
 	}
 
 	// 단계별 실행
-	if err := step1SetStations(page); err != nil {
-		return err
+	steps := []func(playwright.Page) error{
+		Step1_SetStations,
+		Step2_SetDate,
+		Step3_SearchTrains,
+		Step4_CheckAvailability,
+		Step5_ClickReserve,
+		Step6_GoToUnregistered,
+		Step7_VerifyReservationPage,
+		Step8_FillPassengerInfo,
+
+		// Step9_SubmitForm, // 실제 제출은 주석 처리
 	}
-	if err := step2SetDate(page); err != nil {
-		return err
+
+	for i, step := range steps {
+		if i == 4 { // step5 전에 잠시 대기
+			wait(2)
+		}
+		if err := step(page); err != nil {
+			return err
+		}
 	}
-	if err := step3SearchTrains(page); err != nil {
-		return err
-	}
-	if err := step4CheckAvailability(page); err != nil {
-		return err
-	}
-	wait(3)
-	if err := step5ClickReserve(page); err != nil {
-		return err
-	}
-	if err := step6GoToUnregistered(page); err != nil {
-		return err
-	}
-	if err := step7VerifyReservationPage(page); err != nil {
-		return err
-	}
-	if err := step8FillPassengerInfo(page); err != nil {
-		return err
-	}
-	// if err := step9SubmitForm(page); err != nil {
-	// 	return err
-	// }
 
 	return nil
 }
@@ -756,7 +754,7 @@ func main() {
 
 	fmt.Println("▶ SRT 예약 자동화 시작...")
 	fmt.Printf("최대 %d회까지 재시도합니다.\n", maxRetries)
-	fmt.Println("=" + strings.Repeat("=", 60))
+	fmt.Println(strings.Repeat("=", 60))
 
 	// 브라우저 초기화
 	fmt.Println("▶ 브라우저 초기화")
@@ -892,7 +890,7 @@ func sendNotificationEmail(success bool, message string) error {
 		return fmt.Errorf("이메일 발송 실패: %w", err)
 	}
 
-	fmt.Println("   ✅ 예약 성공 및 결제 알림 이메일이 발송되었습니다")
+	fmt.Println("   ✅ 예약 알림 이메일이 발송되었습니다")
 	return nil
 }
 
@@ -919,4 +917,83 @@ func loadConfig() {
 	}
 
 	fmt.Println("✅ 환경변수에서 이메일 설정을 로드했습니다")
+}
+
+// ---------- 대화형 메뉴 관련 함수들 ----------
+
+// 페이지네이션을 지원하는 메뉴에서 항목 선택
+func selectFromMenu(title string, items []string) string {
+	itemsPerPage := 10
+	currentPage := 0
+	totalPages := (len(items) + itemsPerPage - 1) / itemsPerPage
+
+	for {
+		// 현재 페이지의 시작과 끝 인덱스 계산
+		start := currentPage * itemsPerPage
+		end := start + itemsPerPage
+		if end > len(items) {
+			end = len(items)
+		}
+
+		// 화면 출력
+		fmt.Print("\033[2J\033[H") // 화면 지우기
+		fmt.Printf("🚄 %s\n", title)
+		fmt.Println(strings.Repeat("=", 50))
+		fmt.Printf("페이지 %d/%d (총 %d개 역)\n", currentPage+1, totalPages, len(items))
+		fmt.Println()
+
+		// 현재 페이지의 항목들 출력
+		for i := start; i < end; i++ {
+			fmt.Printf("  %d. %s\n", i-start+1, items[i])
+		}
+
+		fmt.Println()
+		fmt.Println("📋 선택 방법:")
+		fmt.Println("  1-10: 번호로 역 선택")
+		if currentPage > 0 {
+			fmt.Println("  p: 이전 페이지")
+		}
+		if currentPage < totalPages-1 {
+			fmt.Println("  n: 다음 페이지")
+		}
+		fmt.Println("  q: 프로그램 종료")
+		fmt.Print("\n선택하세요: ")
+
+		// 사용자 입력 받기
+		reader := bufio.NewReader(os.Stdin)
+		input, _ := reader.ReadString('\n')
+		input = strings.TrimSpace(strings.ToLower(input))
+
+		// 입력 처리
+		switch input {
+		case "q":
+			fmt.Println("프로그램을 종료합니다.")
+			os.Exit(0)
+		case "n":
+			if currentPage < totalPages-1 {
+				currentPage++
+			}
+		case "p":
+			if currentPage > 0 {
+				currentPage--
+			}
+		default:
+			// 숫자 입력 처리
+			if num, err := strconv.Atoi(input); err == nil {
+				if num >= 1 && num <= end-start {
+					selectedIndex := start + num - 1
+					fmt.Print("\033[2J\033[H") // 화면 지우기
+					return items[selectedIndex]
+				}
+			}
+			fmt.Printf("❌ 잘못된 입력입니다. 1-%d 또는 n/p/q를 입력하세요.\n", end-start)
+			fmt.Print("아무 키나 눌러서 계속...")
+			reader.ReadString('\n')
+		}
+	}
+}
+
+// 역 선택 메뉴
+func selectStation(title string) string {
+	return selectFromMenu(title, srtStations)
 }
