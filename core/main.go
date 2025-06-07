@@ -184,7 +184,7 @@ func selectFromMenu(title string, items []string) string {
 			fmt.Println("  n: 다음 페이지")
 		}
 		fmt.Println("  q: 프로그램 종료")
-		fmt.Print("\n선택하세요: ")
+		fmt.Print("\n선택해주세요: ")
 
 		reader := bufio.NewReader(os.Stdin)
 		input, _ := reader.ReadString('\n')
@@ -192,7 +192,7 @@ func selectFromMenu(title string, items []string) string {
 
 		switch input {
 		case "q":
-			fmt.Println("프로그램을 종료합니다.")
+			fmt.Println("프로그램을 종료할게요")
 			os.Exit(0)
 		case "n":
 			if currentPage < totalPages-1 {
@@ -210,7 +210,7 @@ func selectFromMenu(title string, items []string) string {
 					return items[selectedIndex]
 				}
 			}
-			fmt.Printf("❌ 잘못된 입력입니다. 1-%d 또는 n/p/q를 입력하세요.\n", end-start)
+			fmt.Printf("❌ 잘못된 입력이에요. 1-%d 또는 n/p/q를 입력해주세요\n", end-start)
 			fmt.Print("아무 키나 눌러서 계속...")
 			reader.ReadString('\n')
 		}
@@ -401,7 +401,7 @@ func getInputWithValidation(prompt, defaultValue string, validator func(string) 
 
 func validateRequired(value, fieldName string) bool {
 	if strings.TrimSpace(value) == "" {
-		fmt.Printf("   ❌ %s는 필수 입력 항목입니다.\n\n", fieldName)
+		fmt.Printf("   ❌ %s는 필수 입력 항목이에요.\n\n", fieldName)
 		return false
 	}
 	return true
@@ -410,7 +410,7 @@ func validateRequired(value, fieldName string) bool {
 func validatePhone(phone string) bool {
 	re := regexp.MustCompile(`^010\d{8}$`)
 	if !re.MatchString(phone) {
-		fmt.Println("   ❌ 전화번호는 010으로 시작하는 11자리 숫자여야 합니다.")
+		fmt.Println("   ❌ 전화번호는 010으로 시작하는 11자리 숫자여야 해요")
 		fmt.Println("   💡 예시: 01012345678")
 		fmt.Println()
 		return false
@@ -425,7 +425,7 @@ func validateTime(timeStr string) bool {
 
 	// 4자리 숫자인지 확인
 	if len(timeStr) != 4 {
-		fmt.Println("   ❌ 시간은 4자리 숫자로 입력해주세요.")
+		fmt.Println("   ❌ 시간은 4자리 숫자로 입력해주세요")
 		fmt.Println("   💡 예시: 1037 (10시 37분), 0622 (06시 22분)")
 		fmt.Println()
 		return false
@@ -433,7 +433,7 @@ func validateTime(timeStr string) bool {
 
 	// 숫자인지 확인
 	if _, err := strconv.Atoi(timeStr); err != nil {
-		fmt.Println("   ❌ 시간은 숫자만 입력 가능합니다.")
+		fmt.Println("   ❌ 시간은 숫자만 입력 가능해요")
 		fmt.Println("   💡 예시: 1037 (10시 37분), 0622 (06시 22분)")
 		fmt.Println()
 		return false
@@ -445,7 +445,7 @@ func validateTime(timeStr string) bool {
 
 	// 시간 범위 확인 (00~23)
 	if hour < 0 || hour > 23 {
-		fmt.Println("   ❌ 시간은 00~23 사이여야 합니다.")
+		fmt.Println("   ❌ 시간은 00~23 사이여야 해요")
 		fmt.Println("   💡 예시: 1037 (10시 37분), 0622 (06시 22분)")
 		fmt.Println()
 		return false
@@ -453,7 +453,7 @@ func validateTime(timeStr string) bool {
 
 	// 분 범위 확인 (00~59)
 	if minute < 0 || minute > 59 {
-		fmt.Println("   ❌ 분은 00~59 사이여야 합니다.")
+		fmt.Println("   ❌ 분은 00~59 사이여야 해요")
 		fmt.Println("   💡 예시: 1037 (10시 37분), 0622 (06시 22분)")
 		fmt.Println()
 		return false
@@ -469,13 +469,13 @@ func validateMonth(monthStr string) bool {
 
 	month, err := strconv.Atoi(monthStr)
 	if err != nil {
-		fmt.Println("   ❌ 월은 숫자로 입력해주세요.")
+		fmt.Println("   ❌ 월은 숫자로 입력해주세요")
 		fmt.Println()
 		return false
 	}
 
 	if month < 1 || month > 12 {
-		fmt.Println("   ❌ 월은 1~12 사이의 숫자여야 합니다.")
+		fmt.Println("   ❌ 월은 1~12 사이의 숫자여야 해요")
 		fmt.Println("   💡 예시: 6")
 		fmt.Println()
 		return false
@@ -491,13 +491,13 @@ func validateDay(dayStr string) bool {
 
 	day, err := strconv.Atoi(dayStr)
 	if err != nil {
-		fmt.Println("   ❌ 일은 숫자로 입력해주세요.")
+		fmt.Println("   ❌ 일은 숫자로 입력해주세요")
 		fmt.Println()
 		return false
 	}
 
 	if day < 1 || day > 31 {
-		fmt.Println("   ❌ 일은 1~31 사이의 숫자여야 합니다.")
+		fmt.Println("   ❌ 일은 1~31 사이의 숫자여야 해요")
 		fmt.Println("   💡 예시: 22")
 		fmt.Println()
 		return false
@@ -509,14 +509,14 @@ func validateDay(dayStr string) bool {
 func validateDate(dateStr string) bool {
 	re := regexp.MustCompile(`^\d{8}$`)
 	if !re.MatchString(dateStr) {
-		fmt.Println("   ❌ 날짜는 YYYYMMDD 형식으로 입력해주세요.")
+		fmt.Println("   ❌ 날짜는 YYYYMMDD 형식으로 입력해주세요")
 		fmt.Println("   💡 예시: 20250622")
 		fmt.Println()
 		return false
 	}
 
 	if _, err := time.Parse("20060102", dateStr); err != nil {
-		fmt.Println("   ❌ 유효하지 않은 날짜입니다.")
+		fmt.Println("   ❌ 유효하지 않은 날짜에요")
 		fmt.Println()
 		return false
 	}
@@ -531,7 +531,7 @@ func validateEmail(email string) bool {
 
 	re := regexp.MustCompile(`^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$`)
 	if !re.MatchString(email) {
-		fmt.Println("   ❌ 올바른 이메일 형식이 아닙니다.")
+		fmt.Println("   ❌ 올바른 이메일 형식이 아니에요")
 		fmt.Println("   💡 예시: example@gmail.com")
 		fmt.Println()
 		return false
@@ -544,12 +544,12 @@ func validatePassword(password string) bool {
 		return false
 	}
 	if len(password) != 5 {
-		fmt.Println("   ❌ 비밀번호는 5자리여야 합니다.")
+		fmt.Println("   ❌ 비밀번호는 5자리여야 해요")
 		fmt.Println()
 		return false
 	}
 	if _, err := strconv.Atoi(password); err != nil {
-		fmt.Println("   ❌ 비밀번호는 숫자만 입력 가능합니다.")
+		fmt.Println("   ❌ 비밀번호는 숫자만 입력 가능해요")
 		fmt.Println()
 		return false
 	}
@@ -569,7 +569,7 @@ func collectUserInput() {
 	printSubHeader("⚠️  시스템 제한사항")
 	fmt.Println("   🚫 좌석 선택 기능: 현재 제공하지 않음 (자동 배정)")
 	fmt.Println("   🚫 인원 수 선택 기능: 현재 제공하지 않음 (1명 기준)")
-	fmt.Println("   ℹ️  위 기능들은 추후 업데이트 예정입니다")
+	fmt.Println("   ℹ️  위 기능들은 추후 업데이트 예정이에요")
 	fmt.Println()
 
 	// 👤 고객 유형 선택
@@ -583,16 +583,16 @@ func collectUserInput() {
 		switch customerChoice {
 		case "1":
 			passengerInfo.customerType = "unregistered"
-			fmt.Println("   ✅ 미등록 고객 예매로 진행합니다.")
+			fmt.Println("   ✅ 미등록 고객 예매로 진행할게요")
 			fmt.Println()
 			break
 		case "2":
 			passengerInfo.customerType = "login"
-			fmt.Println("   ✅ 로그인 고객 예매로 진행합니다.")
+			fmt.Println("   ✅ 로그인 고객 예매로 진행할게요")
 			fmt.Println()
 			break
 		default:
-			fmt.Println("   ❌ 1 또는 2를 입력해주세요.")
+			fmt.Println("   ❌ 1 또는 2를 입력해주세요")
 			fmt.Println()
 			continue
 		}
@@ -715,7 +715,7 @@ func collectUserInput() {
 			switch loginChoice {
 			case "1":
 				passengerInfo.loginType = "member"
-				fmt.Println("   ✅ 회원번호 로그인을 선택했습니다.")
+				fmt.Println("   ✅ 회원번호 로그인을 선택했어요")
 				passengerInfo.loginId = getInputWithValidation(
 					"회원번호를 입력하세요",
 					"",
@@ -725,7 +725,7 @@ func collectUserInput() {
 				break
 			case "2":
 				passengerInfo.loginType = "email"
-				fmt.Println("   ✅ 이메일 로그인을 선택했습니다.")
+				fmt.Println("   ✅ 이메일 로그인을 선택했어요")
 				passengerInfo.loginId = getInputWithValidation(
 					"이메일을 입력하세요",
 					"",
@@ -735,7 +735,7 @@ func collectUserInput() {
 				break
 			case "3":
 				passengerInfo.loginType = "phone"
-				fmt.Println("   ✅ 전화번호 로그인을 선택했습니다.")
+				fmt.Println("   ✅ 전화번호 로그인을 선택했어요")
 				passengerInfo.loginId = getInputWithValidation(
 					"전화번호를 입력하세요 (숫자만)",
 					"",
@@ -744,7 +744,7 @@ func collectUserInput() {
 				)
 				break
 			default:
-				fmt.Println("   ❌ 1, 2, 3 중 하나를 입력해주세요.")
+				fmt.Println("   ❌ 1, 2, 3 중 하나를 입력해주세요")
 				fmt.Println()
 				continue
 			}
@@ -802,12 +802,12 @@ func collectUserInput() {
 	fmt.Println()
 
 	if !getYesNoInput("위 정보가 맞습니까?", true) {
-		fmt.Println("   🔄 정보를 다시 입력합니다.")
+		fmt.Println("   🔄 정보를 다시 입력할게요")
 		collectUserInput()
 		return
 	}
 
-	fmt.Println("   ✅ 정보 확인 완료! 예약을 시작합니다.")
+	fmt.Println("   ✅ 정보 확인 완료! 예약을 시작할게요")
 	fmt.Println()
 }
 
@@ -922,7 +922,7 @@ func step4CheckAvailability(page playwright.Page) error {
 		}
 	}
 
-	return fmt.Errorf("예약 가능한 열차를 찾을 수 없습니다")
+	return fmt.Errorf("예약 가능한 열차를 찾을 수 없어요")
 }
 
 func step5ClickReserve(page playwright.Page) error {
@@ -958,7 +958,7 @@ func step5ClickReserve(page playwright.Page) error {
 				continue
 			}
 			if fullText > 0 {
-				return fmt.Errorf("매진된 열차입니다 - 예매를 다시 시도합니다")
+				return fmt.Errorf("매진된 열차에요 - 예매를 다시 시도해요")
 			}
 
 			reserveButton := tds[6].Locator("a > span:has-text('예약하기')")
@@ -970,7 +970,7 @@ func step5ClickReserve(page playwright.Page) error {
 		}
 	}
 
-	return fmt.Errorf("예약하기 버튼을 찾을 수 없습니다")
+	return fmt.Errorf("예약하기 버튼을 찾을 수 없어요")
 }
 
 func step6ChooseReservationType(page playwright.Page) error {
@@ -995,15 +995,15 @@ func step6ChooseReservationType(page playwright.Page) error {
 
 func step7LoginProcess(page playwright.Page) error {
 	if passengerInfo.customerType == "unregistered" {
-		// 미등록 고객: 예약자 정보 입력 화면 확인
+		// 미등록 고객인 경우 미등록고객 예매 버튼 클릭
 		currentURL := page.URL()
 		if !strings.Contains(currentURL, "selectReservationForm") {
-			return fmt.Errorf("예약 페이지로 이동하지 못했습니다 (현재 URL: %s)", currentURL)
+			return fmt.Errorf("예약 페이지로 이동하지 못했어요 (현재 URL: %s)", currentURL)
 		}
 		fmt.Println("   ✓ 예약자 정보 입력 화면으로 이동 완료")
 		return nil
 	} else {
-		// 로그인 고객: 실제 로그인 처리
+		// 로그인 고객인 경우 실제 로그인 처리
 		return step7ProcessLogin(page)
 	}
 }
@@ -1070,13 +1070,13 @@ func step7ProcessLogin(page playwright.Page) error {
 	// 로그인 성공 확인 (URL이나 특정 요소로 확인 가능)
 	currentURL := page.URL()
 	if strings.Contains(currentURL, "login") {
-		return fmt.Errorf("로그인에 실패했습니다. 아이디나 비밀번호를 확인해주세요")
+		return fmt.Errorf("로그인에 실패했어요. 아이디나 비밀번호를 확인해주세요")
 	}
 
 	// '나중에 변경하기' 링크가 있으면 클릭
 	laterChangeLink := page.Locator("a:has-text('나중에 변경하기')")
 	if count, _ := laterChangeLink.Count(); count > 0 {
-		fmt.Println("   > '나중에 변경하기' 링크 발견, 클릭합니다...")
+		fmt.Println("   > '나중에 변경하기' 링크 발견, 클릭해요...")
 		if err := laterChangeLink.Click(); err != nil {
 			fmt.Printf("   ⚠️ '나중에 변경하기' 링크 클릭 실패 (계속 진행): %v\n", err)
 		} else {
@@ -1088,7 +1088,7 @@ func step7ProcessLogin(page playwright.Page) error {
 	fmt.Println("   ✓ 로그인 완료")
 
 	// 로그인 고객은 여기서 예약이 완료됨
-	fmt.Println("🎉 로그인 고객 예약이 완료되었습니다!")
+	fmt.Println("🎉 로그인 고객 예약이 완료되었어요!")
 
 	return nil
 }
@@ -1208,7 +1208,7 @@ func sendNotificationEmail(success bool, message string) error {
 			reserverName = "회원정보 사용"
 		}
 
-		body = fmt.Sprintf(`SRT 예약이 성공적으로 완료되었습니다!
+		body = fmt.Sprintf(`SRT 예약이 성공적으로 완료되었어요!
 
 📍 예약 정보:
 - 고객유형: %s
@@ -1228,7 +1228,7 @@ func sendNotificationEmail(success bool, message string) error {
 			message)
 	} else {
 		subject = "⚠️ SRT 미등록고객 예약 실패 알림"
-		body = fmt.Sprintf(`SRT 예약에 실패했습니다.
+		body = fmt.Sprintf(`SRT 예약에 실패했어요.
 
 📍 시도한 예약 정보:
 - 출발역: %s (%s)
@@ -1237,7 +1237,7 @@ func sendNotificationEmail(success bool, message string) error {
 
 ❌ 오류: %s
 
-다시 시도하거나 수동으로 예약해주세요.`,
+다시 시도하거나 수동으로 예약해보세요`,
 			passengerInfo.deptStation, passengerInfo.deptTime,
 			passengerInfo.arrivalStation, passengerInfo.arrivalTime,
 			passengerInfo.date,
@@ -1259,7 +1259,7 @@ func sendNotificationEmail(success bool, message string) error {
 		return fmt.Errorf("이메일 발송 실패: %w", err)
 	}
 
-	fmt.Println("   ✅ 예약 알림 이메일이 발송되었습니다")
+	fmt.Println("   ✅ 예약 알림 이메일이 발송되었어요")
 	return nil
 }
 
@@ -1269,7 +1269,7 @@ func sendNotificationEmail(success bool, message string) error {
 
 func loadConfig() {
 	if err := godotenv.Load(); err != nil {
-		fmt.Println("⚠️ .env 파일을 찾을 수 없습니다. 기본값을 사용합니다.")
+		fmt.Println("⚠️ .env 파일을 찾을 수 없어요. 기본값을 사용할게요")
 		return
 	}
 
@@ -1286,7 +1286,7 @@ func loadConfig() {
 		emailConfig.senderPass = pass
 	}
 
-	fmt.Println("✅ 환경변수에서 보안 데이터 설정을 로드했습니다")
+	fmt.Println("✅ 환경변수에서 보안 데이터 설정을 로드했어요")
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════
@@ -1306,7 +1306,7 @@ func main() {
 	collectUserInput()
 
 	fmt.Println("▶ SRT 예약 자동화 시작...")
-	fmt.Printf("최대 %d회까지 재시도합니다.\n", maxRetries)
+	fmt.Printf("최대 %d회까지 재시도해요\n", maxRetries)
 	fmt.Println(strings.Repeat("=", 60))
 
 	fmt.Println("▶ 브라우저 초기화")
@@ -1334,8 +1334,8 @@ func main() {
 	for attempt := 1; attempt <= maxRetries; attempt++ {
 		err := attemptReservation(page, attempt)
 		if err == nil {
-			fmt.Printf("\n✨ 성공! %d번째 시도에서 예약에 성공했습니다!\n", attempt)
-			fmt.Println("ℹ️ 지금 결제를 진행하세요. 10분 후 브라우저가 자동으로 종료됩니다.")
+			fmt.Printf("\n✨ 성공! %d번째 시도에서 예약에 성공했어요!\n", attempt)
+			fmt.Println("ℹ️ 지금 결제를 진행하세요. 10분 후 브라우저가 자동으로 종료돼요")
 
 			if err := sendNotificationEmail(true, ""); err != nil {
 				fmt.Printf("이메일 발송 실패: %v\n", err)
@@ -1358,15 +1358,15 @@ func main() {
 
 		if attempt < maxRetries {
 			waitTime := 3
-			fmt.Printf("⏸️ %d초 후 재시도합니다...\n", waitTime)
+			fmt.Printf("⏸️ %d초 후 재시도해요...\n", waitTime)
 			showLoadingAnimation("다음 시도를 준비하는 중이에요", waitTime)
 		}
 	}
 
 	if lastError != nil {
-		fmt.Printf("\n⚠️ %d회 모든 시도가 실패했습니다!\n", maxRetries)
+		fmt.Printf("\n⚠️ %d회 모든 시도가 실패했어요!\n", maxRetries)
 		fmt.Printf("마지막 오류: %v\n", lastError)
-		fmt.Println("↻ 프로그램을 다시 실행해보거나 수동으로 예약을 시도하세요.")
+		fmt.Println("↻ 프로그램을 다시 실행해보거나 수동으로 예약을 시도해보세요")
 		wait(5)
 
 		if err := sendNotificationEmail(false, lastError.Error()); err != nil {
