@@ -100,6 +100,15 @@ var emailConfig = struct {
 	senderPass:  "",
 }
 
+// 🔐 접근 제어 설정 구조체
+var accessConfig = struct {
+	isPublic  bool
+	accessKey string
+}{
+	isPublic:  true, // 기본값: 공개 모드
+	accessKey: "",
+}
+
 // ═══════════════════════════════════════════════════════════════════════════════
 // 🔧 유틸리티 함수들
 // ═══════════════════════════════════════════════════════════════════════════════
@@ -362,6 +371,43 @@ func getPasswordInput(prompt string) string {
 	}
 
 	return string(password)
+}
+
+// 🔐 접근 제어 검증 함수
+func checkAccess() bool {
+	if accessConfig.isPublic {
+		return true // 공개 모드인 경우 바로 통과
+	}
+
+	if accessConfig.accessKey == "" {
+		fmt.Println("⚠️ 비공개 모드이지만 ACCESS_KEY가 설정되지 않았어요")
+		fmt.Println("   PUBLIC_MODE=true로 설정하거나 ACCESS_KEY를 설정해주세요")
+		return false
+	}
+
+	printHeader("🔐 서비스 접근 인증")
+	fmt.Println("   이 서비스는 비공개 모드로 운영되고 있어요")
+	fmt.Println("   서비스를 이용하려면 접근 암호를 입력해주세요")
+	fmt.Println()
+
+	maxAttempts := 3
+	for attempt := 1; attempt <= maxAttempts; attempt++ {
+		inputPassword := getPasswordInput(fmt.Sprintf("접근 암호를 입력하세요 (%d/%d)", attempt, maxAttempts))
+
+		if inputPassword == accessConfig.accessKey {
+			fmt.Println("   ✅ 인증 성공! 서비스를 시작할게요")
+			fmt.Println()
+			return true
+		}
+
+		if attempt < maxAttempts {
+			fmt.Printf("   ❌ 잘못된 암호에요. %d번 더 시도할 수 있어요\n", maxAttempts-attempt)
+			fmt.Println()
+		}
+	}
+
+	fmt.Println("   ❌ 접근이 거부되었어요. 프로그램을 종료할게요")
+	return false
 }
 
 func getYesNoInput(prompt string, defaultValue bool) bool {
@@ -1273,6 +1319,7 @@ func loadConfig() {
 		return
 	}
 
+	// 이메일 설정 로드
 	if host := os.Getenv("SMTP_HOST"); host != "" {
 		emailConfig.smtpHost = host
 	}
@@ -1286,6 +1333,14 @@ func loadConfig() {
 		emailConfig.senderPass = pass
 	}
 
+	// 접근 제어 설정 로드
+	if publicMode := os.Getenv("PUBLIC_MODE"); publicMode != "" {
+		accessConfig.isPublic = (publicMode == "true")
+	}
+	if accessKey := os.Getenv("ACCESS_KEY"); accessKey != "" {
+		accessConfig.accessKey = accessKey
+	}
+
 	fmt.Println("✅ 환경변수에서 보안 데이터 설정을 로드했어요")
 }
 
@@ -1295,6 +1350,11 @@ func loadConfig() {
 
 func main() {
 	loadConfig()
+
+	// 🔐 접근 제어 검증
+	if !checkAccess() {
+		os.Exit(1)
+	}
 
 	defer func() {
 		if r := recover(); r != nil {
